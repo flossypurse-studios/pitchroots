@@ -38,6 +38,10 @@ const MAX_NEW_PER_SOURCE = 12;
 // Consecutive whole-poll failures before a source is auto-parked (active=false).
 // ~24 ≈ a day of hourly failures; recheckDisabledSources heals it when it recovers.
 const FAIL_DISABLE_THRESHOLD = 24;
+// How many sources ingest concurrently. Each one is a separate Edge Function
+// invocation holding a Postgres connection, so this is really a connection-pool
+// budget, not a throughput knob. Raise only alongside the pool.
+const FANOUT = 6;
 
 // Canonical tag vocabulary — MUST stay in lockstep with web/src/lib/tags.ts.
 // (The Edge Function can't import from the Next app; this is the one duplication,
@@ -128,14 +132,39 @@ async function fetchFeed(source: SourceRow): Promise<Candidate[]> {
   const parser = new XMLParser({ ignoreAttributes: false, cdataPropName: "__cdata" });
   const doc = parser.parse(xml);
 
+  // A feed value arrives as a bare string, a CDATA/#text wrapper, or an array of
+  // either — repeated elements always parse to an array. WordPress feeds commonly
+  // emit several <link> elements per item (the real permalink plus empty
+  // app-deep-link placeholders), so take the first entry that carries any text.
   const text = (v: unknown): string => {
     if (v == null) return "";
-    if (typeof v === "string") return v;
+    if (typeof v === "string") return v.trim();
+    if (Array.isArray(v)) {
+      for (const el of v) {
+        const t = text(el);
+        if (t) return t;
+      }
+      return "";
+    }
     if (typeof v === "object") {
       const o = v as Record<string, unknown>;
       return text(o.__cdata ?? o["#text"] ?? "");
     }
-    return String(v);
+    return String(v).trim();
+  };
+
+  // Atom — and some RSS — carry the URL in an @_href attribute instead of the
+  // element body. Prefer rel="alternate"; ignore entries with no usable href so a
+  // placeholder element can't shadow the real link.
+  const href = (v: unknown): string => {
+    const arr = Array.isArray(v) ? v : [v];
+    const withHref = arr.filter(
+      (x): x is Record<string, unknown> =>
+        !!x && typeof x === "object" &&
+        typeof (x as Record<string, unknown>)["@_href"] === "string",
+    );
+    const alt = withHref.find((x) => x["@_rel"] === "alternate") ?? withHref[0];
+    return String(alt?.["@_href"] ?? "").trim();
   };
 
   const rssItems = doc?.rss?.channel?.item;
@@ -148,13 +177,7 @@ async function fetchFeed(source: SourceRow): Promise<Candidate[]> {
 
   const out: Candidate[] = [];
   for (const it of raw) {
-    let link = text(it.link);
-    if (!link && it.link && typeof it.link === "object") {
-      const l = it.link as Record<string, unknown> | Record<string, unknown>[];
-      const arr = Array.isArray(l) ? l : [l];
-      const alt = arr.find((x) => x["@_rel"] === "alternate") ?? arr[0];
-      link = String(alt?.["@_href"] ?? "");
-    }
+    const link = text(it.link) || href(it.link);
     const title = stripHtml(text(it.title));
     if (!link || !title) continue;
     const guid = text(it.guid) || text(it.id) || link;
@@ -290,18 +313,28 @@ async function classify(source: SourceRow, c: Candidate): Promise<Classification
 resonate.register("poll", async function poll(ctx: Context) {
   const sources = (await ctx.run(() => getActiveSources())) as SourceRow[];
 
-  const results = (await Promise.all(
-    sources.map(async (s) => {
-      try {
-        return await ctx.rpc("ingestSource", s);
-      } catch (err) {
-        return {
-          source: s.name, fetched: 0, deadLinks: 0, classified: 0,
-          published: 0, dropped: 0, error: String(err),
-        } as SourceStats;
-      }
-    }),
-  )) as SourceStats[];
+  // Fan out per source in bounded waves rather than all at once. Each ingestSource
+  // is its own Edge Function invocation holding its own Postgres connection, so an
+  // unbounded fan-out exhausts the connection pool as the registry grows — at 23
+  // sources it already did, losing two feeds per run to "remaining connection slots
+  // are reserved". FANOUT is a constant and the source list is checkpointed, so wave
+  // membership is identical on every replay.
+  const results: SourceStats[] = [];
+  for (let i = 0; i < sources.length; i += FANOUT) {
+    const wave = await Promise.all(
+      sources.slice(i, i + FANOUT).map(async (s) => {
+        try {
+          return await ctx.rpc("ingestSource", s);
+        } catch (err) {
+          return {
+            source: s.name, fetched: 0, deadLinks: 0, classified: 0,
+            published: 0, dropped: 0, error: String(err),
+          } as SourceStats;
+        }
+      }),
+    ) as SourceStats[];
+    results.push(...wave);
+  }
 
   const published = results.reduce((n, r) => n + r.published, 0);
   if (published > 0) await ctx.run(() => triggerRevalidate());
