@@ -20,7 +20,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: SITE, lastModified: home, changeFrequency: "hourly", priority: 1 },
     { url: `${SITE}/about`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE}/how-it-works`, changeFrequency: "monthly", priority: 0.3 },
-    ...TAGS.map((t) => ({
+    // Only submit hubs that actually have items. `lastByTag` is built from a query
+    // grouped over existing items, so an empty hub is simply absent from it. Before
+    // this filter, empty hubs were not only listed but stamped with the whole feed's
+    // latest timestamp — telling Google a content-free page had just been updated.
+    ...TAGS.filter((t) => lastByTag.has(t.slug)).map((t) => ({
       url: `${SITE}/${t.slug}`,
       lastModified: lastByTag.get(t.slug) ?? home,
       changeFrequency: "hourly" as const,

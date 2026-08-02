@@ -273,9 +273,17 @@ const CLASSIFY_TOOL: Anthropic.Tool = {
 };
 
 async function classify(source: SourceRow, c: Candidate): Promise<Classification> {
+  // Both non-soccer items that reached the feed — a PWHL story and a junior-hockey
+  // story — came from newspaper desks filing another sport into their soccer
+  // category, and both carried a Canadian angle strong enough to satisfy a gate that
+  // only asked "is this Canadian?". So the sport test runs first and names the sports
+  // that actually leak; Canadian relevance is the second question, never the first.
   const gate = source.media_gate
-    ? "This source is a general sports outlet: be STRICT — mark relevant only when the item clearly involves a Canadian team, league, competition, or Canadian player. Generic international soccer coverage is NOT relevant."
-    : "This source covers Canadian soccer: default to relevant unless the item is clearly not about soccer.";
+    ? "This source is a general sports outlet and its soccer section sometimes contains other sports. Apply two tests, in this order. " +
+      "FIRST — is this association football (soccer)? Ice hockey (NHL, PWHL, CHL, Memorial Cup, Centennial Cup), Canadian or American football, basketball, baseball, golf, curling, and tennis are NOT soccer, however Canadian the story is. A trophy or tournament name alone does not make something soccer. " +
+      "SECOND — does it involve a Canadian team, league, competition, or Canadian player? Generic international soccer coverage is NOT relevant. " +
+      "If you cannot tell which sport an item is about, it is NOT relevant."
+    : "This source covers Canadian soccer: default to relevant unless the item is clearly not about association football (soccer).";
   const response = await claude.messages.create({
     model: "claude-haiku-4-5",
     max_tokens: 1024,
@@ -289,11 +297,12 @@ async function classify(source: SourceRow, c: Candidate): Promise<Classification
       "canpl = Atlético Ottawa, Cavalry FC, Forge FC, Halifax Wanderers, Pacific FC, Valour FC, Vancouver FC, York United. " +
       "nsl = AFC Toronto, Calgary Wild, Halifax Tides, Montreal Roses, Ottawa Rapid, Vancouver Rise. " +
       "Tag provinces only for stories with a clear provincial/city angle. " +
+      "The URL is evidence of the section the publisher filed the story under — a path like /sports/hockey/ is a strong signal, but weigh it against the headline, since a soccer story can be filed under another sport's section when it involves that sport's people. " +
       gate,
     messages: [
       {
         role: "user",
-        content: `Source: ${source.name} (tier: ${source.tier})\nTitle: ${c.title}\nPublished: ${c.publishedAt}\nExcerpt: ${c.snippet || "(none)"}`,
+        content: `Source: ${source.name} (tier: ${source.tier})\nTitle: ${c.title}\nURL: ${c.url}\nPublished: ${c.publishedAt}\nExcerpt: ${c.snippet || "(none)"}`,
       },
     ],
   });
@@ -386,7 +395,7 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
     stats.error = String(lastErr);
     return stats;
   }
-  await ctx.run(() => markSourceOk(source.id));
+  await ctx.run(() => markSourceOk(source.id, entries.length > 0));
 
   // Wrapped in ctx.run so the cutoff is checkpointed: every replay uses the same
   // boundary regardless of when a resumed worker wakes (control flow must depend
@@ -458,7 +467,11 @@ resonate.register(
     let healed = 0;
     for (const source of disabled) {
       try {
-        await ctx.run(() => fetchFeed(source)); // reachable + parseable?
+        // Reachable, parseable, AND actually carrying items — a feed parked for
+        // serving empty 200s would otherwise be revived on the very next recheck,
+        // since fetching it succeeds every time.
+        const entries = (await ctx.run(() => fetchFeed(source))) as Candidate[];
+        if (entries.length === 0) continue;
         await ctx.run(() => reviveSource(source.id));
         healed++;
       } catch {
@@ -477,8 +490,22 @@ async function getActiveSources(): Promise<SourceRow[]> {
   return await sql<SourceRow[]>`select * from sources where active order by id`;
 }
 
-async function markSourceOk(id: number): Promise<null> {
-  await sql`update sources set last_polled_at = now(), last_ok_at = now(), fail_count = 0 where id = ${id}`;
+// A feed that answers 200 with an empty channel is the blind spot that let the old
+// Canada Soccer feed sit dead from launch: fetchFeed succeeds, so fail_count resets
+// and auto-park never fires. Track consecutive empty parses separately and park on
+// the same threshold. The test is on RAW entries, not post-cutoff `fresh` — a
+// low-volume source with nothing published this week is healthy, not broken.
+async function markSourceOk(id: number, hadEntries: boolean): Promise<null> {
+  await sql`
+    update sources
+       set last_polled_at = now(),
+           last_ok_at = now(),
+           fail_count = 0,
+           empty_streak = case when ${hadEntries} then 0 else empty_streak + 1 end,
+           active = case
+             when not ${hadEntries} and empty_streak + 1 >= ${FAIL_DISABLE_THRESHOLD}
+             then false else active end
+     where id = ${id}`;
   return null;
 }
 
@@ -499,11 +526,14 @@ async function markSourceFail(id: number): Promise<null> {
 }
 
 async function getDisabledSources(): Promise<SourceRow[]> {
-  return await sql<SourceRow[]>`select * from sources where not active order by id`;
+  // `retired` distinguishes "we decided to stop carrying this" from "it is failing
+  // health checks". Without it, auto-heal would cheerfully un-park a source that was
+  // dropped on purpose, because a retired feed usually still responds fine.
+  return await sql<SourceRow[]>`select * from sources where not active and not retired order by id`;
 }
 
 async function reviveSource(id: number): Promise<null> {
-  await sql`update sources set active = true, fail_count = 0, last_ok_at = now(), last_polled_at = now() where id = ${id}`;
+  await sql`update sources set active = true, fail_count = 0, empty_streak = 0, last_ok_at = now(), last_polled_at = now() where id = ${id}`;
   return null;
 }
 

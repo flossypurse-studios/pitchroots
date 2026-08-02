@@ -128,3 +128,39 @@ insert into sources (name, feed_url, home_url, tier, media_gate, ua_override) va
   ('Winnipeg Free Press Soccer', 'https://winnipegfreepress.com/rss/?path=/sports/soccer', 'https://www.winnipegfreepress.com/sports/soccer/', 'media', true, null),
   ('Toronto Star Soccer', 'https://www.thestar.com/search/?f=rss&t=article&c=sports/soccer', 'https://www.thestar.com/sports/soccer/', 'media', true, null)
 on conflict (feed_url) do nothing;
+
+-- 2026-08-02 (second pass) ── source pruning, UA posture, health signals.
+-- Review findings in SOURCE-REVIEW-2026-08.md §7.
+
+-- `retired` = a deliberate editorial decision to stop carrying a source, as opposed
+-- to `not active` meaning "auto-parked for failing health checks". Auto-heal skips
+-- retired rows; without the distinction it would revive them, since a source dropped
+-- for editorial reasons usually still serves a perfectly healthy feed.
+alter table sources add column if not exists retired boolean not null default false;
+
+-- Consecutive polls where the feed parsed to zero items. A feed answering 200 with an
+-- empty channel resets fail_count, so it needs its own counter or it rots unnoticed —
+-- which is exactly what the old Canada Soccer feed did from launch.
+alter table sources add column if not exists empty_streak int not null default 0;
+
+-- Retire the sources that failed for structural reasons, not sampling noise:
+-- five whose soccer desks carry only international wire copy, one whose feed
+-- ignores its own category parameter and returns general news, and one whose feed
+-- URL sits under a path its robots.txt disallows (and which rate-limits us anyway).
+update sources set active = false, retired = true
+ where name in (
+   'Toronto Sun Soccer', 'Windsor Star Soccer', 'Sudbury Star Soccer',
+   'Sault Star Soccer', 'Kingston Whig-Standard Soccer',
+   'Winnipeg Free Press Soccer', 'Toronto Star Soccer'
+ );
+
+-- Drop the browser User-Agent on the publishers that declare syndication terms.
+-- These serve a truncated feed to a non-browser UA rather than blocking it, and at
+-- 1–4 soccer items a day against an hourly poll, a short feed loses almost nothing.
+-- The override stays only where the 403 is a stock edge/WAF rule rather than a
+-- publisher's stated intent.
+update sources set ua_override = null
+ where name in (
+   'Globe and Mail Soccer', 'Calgary Herald Soccer',
+   'The Province Soccer', 'Edmonton Journal Soccer'
+ );

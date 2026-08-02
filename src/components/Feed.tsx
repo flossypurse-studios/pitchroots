@@ -16,11 +16,18 @@ const dateFmt = new Intl.DateTimeFormat("en-CA", {
 // How many cards to show first, and how many to reveal per scroll. 10 fills a
 // desktop viewport with a couple of cards of runway; a smaller first batch would
 // under-fill the screen and trigger an immediate second load.
+//
+// This is the SSR count as well as the first-paint count: Next renders a client
+// component with its initial state, and Googlebot executes JS but never scrolls, so
+// the sentinel never fires for a crawler. Whatever `initial` is, that is all a
+// crawler ever sees. The home feed keeps the progressive reveal; tag hubs — which
+// are the site's entire SEO surface — pass their full length so nothing is hidden
+// from the crawler behind a scroll event.
 const INITIAL = 10;
 const STEP = 10;
 
-export function Feed({ items }: { items: FeedItem[] }) {
-  const [visible, setVisible] = useState(INITIAL);
+export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?: number }) {
+  const [visible, setVisible] = useState(initial);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {

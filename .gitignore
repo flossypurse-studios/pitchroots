@@ -43,3 +43,6 @@ next-env.d.ts
 # Supabase CLI local state
 supabase/.temp/
 supabase/.branches/
+
+# mycadre worktree tracking (machine-local absolute paths)
+.mycadre-state.json
