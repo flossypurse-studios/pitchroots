@@ -28,7 +28,16 @@ const claude = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
 // postgres.js over the Supabase pooler: prepare:false + max:1 is the pooler-safe
 // setting (transaction-mode pooling rejects prepared statements).
-const sql = postgres(Deno.env.get("SUPABASE_DB_URL")!, { prepare: false, max: 1 });
+// Supabase's managed SUPABASE_DB_URL is a *direct* connection (5432), which has a
+// hard max_connections ceiling — with one invocation per source each holding a
+// connection, a fan-out wide enough to be useful hits "remaining connection slots are
+// reserved" and silently drops sources. PITCHROOTS_DB_URL points at the transaction
+// pooler (6543) instead, which is what prepare:false + max:1 was always for. Falls
+// back to the direct URL so a fresh deploy without the secret still runs.
+const sql = postgres(
+  Deno.env.get("PITCHROOTS_DB_URL") ?? Deno.env.get("SUPABASE_DB_URL")!,
+  { prepare: false, max: 1 },
+);
 
 const DEFAULT_UA = "Mozilla/5.0 (compatible; PitchRoots/1.0; +https://pitchroots.ca)";
 const MAX_ITEM_AGE_DAYS = 7;
