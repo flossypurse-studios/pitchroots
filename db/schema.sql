@@ -185,3 +185,20 @@ create index if not exists item_sources_item_idx on item_sources (item_id, publi
 insert into item_sources (item_id, source_id, url, title, published_at)
   select i.id, i.source_id, i.url, i.title, i.published_at from items i
 on conflict (item_id, source_id) do nothing;
+
+-- 2026-08-03 ── review fixes. See SOURCE-REVIEW-2026-08.md §8.
+
+-- Citations carry the originating feed guid so `alreadySeen` can recognise an
+-- outlet we already attached. Previously that memo lived in `rejections`, which
+-- has no foreign key to `items` — so deleting a story stranded an immortal row and
+-- permanently blocked that outlet from ever being ingested for it again. Citations
+-- cascade with the item, so the memo now dies with the thing it describes.
+alter table item_sources add column if not exists guid text;
+create index if not exists item_sources_guid_idx on item_sources (source_id, guid);
+
+-- Backfill: for the primary outlet the guid is the item's own.
+update item_sources x set guid = i.guid
+  from items i where i.id = x.item_id and x.source_id = i.source_id and x.guid is null;
+
+-- Attachment count as a queryable column rather than buried in per_source JSONB.
+alter table run_log add column if not exists attached int;

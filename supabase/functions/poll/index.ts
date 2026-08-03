@@ -493,9 +493,7 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
     c.canonicalUrl = canonicalize(verdict.url);
 
     // Same URL we already hold — nothing to add, not even a citation.
-    const dup = (await ctx.run(() =>
-      isDuplicateContent(c.canonicalUrl, c.title, c.publishedAt)
-    )) as boolean;
+    const dup = (await ctx.run(() => isDuplicateLink(c.canonicalUrl))) as boolean;
     if (dup) continue;
 
     // A second outlet on a story we already carry becomes a citation on the
@@ -517,11 +515,16 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
       }
     }
     if (attachedTo !== null) {
-      const added = (await ctx.run(() => attachSource(attachedTo, source.id, c))) as boolean;
-      if (added) stats.attached++;
-      // Memoize the guid or every future run re-adjudicates this same item. The
-      // rejections table is really "seen and handled without publishing".
-      await ctx.run(() => remember(source.id, c.guid));
+      await ctx.run(() => attachSource(attachedTo, source.id, c));
+      // Counted on the decision, not on whether the insert reported a new row: a
+      // replay re-runs attachSource, hits the conflict, and would otherwise report
+      // nothing happened for an attachment that did.
+      stats.attached++;
+      // Adjudicating costs a model call, so an attachment spends from the same
+      // per-source budget as a publish. Without this the cap guarded only the
+      // publish path, and a backfill of a large source could run hundreds of
+      // adjudications in one invocation while `taken` never moved.
+      taken++;
       continue;
     }
 
@@ -639,6 +642,7 @@ async function logRun(
   s: {
     sources: number;
     published: number;
+    attached: number;
     classified: number;
     deadLinks: number;
     dropped: number;
@@ -646,8 +650,8 @@ async function logRun(
   },
 ): Promise<null> {
   await sql`
-    insert into run_log (origin_id, sources, published, classified, dead_links, dropped, per_source)
-    values (${originId}, ${s.sources}, ${s.published}, ${s.classified},
+    insert into run_log (origin_id, sources, published, attached, classified, dead_links, dropped, per_source)
+    values (${originId}, ${s.sources}, ${s.published}, ${s.attached}, ${s.classified},
             ${s.deadLinks}, ${s.dropped}, ${sql.json(s.perSource)})
     on conflict (origin_id) do nothing`;
   return null;
@@ -656,29 +660,32 @@ async function logRun(
 async function alreadySeen(sourceId: number, guid: string): Promise<boolean> {
   const [byGuid] = await sql`select 1 from items where source_id = ${sourceId} and guid = ${guid} limit 1`;
   if (byGuid) return true;
+  // An attached outlet is remembered on the citation rather than in `rejections`.
+  // `rejections` has no foreign key to `items`, so a guid recorded there outlives
+  // the item it referred to — deleting a story would leave every outlet that had
+  // been attached to it permanently unable to be ingested again, because nothing
+  // would ever re-offer that guid. Citations cascade with the item, so this memo
+  // dies exactly when the thing it describes does.
+  const [cited] = await sql`
+    select 1 from item_sources where source_id = ${sourceId} and guid = ${guid} limit 1`;
+  if (cited) return true;
   const [rejected] = await sql`select 1 from rejections where source_id = ${sourceId} and guid = ${guid} limit 1`;
   return Boolean(rejected);
 }
 
-// The window is anchored to the candidate's own publication time, not to now().
-// Anchoring on now() made the comparison depend on when the pipeline happened to
-// run: a source that republished the same article at a new slug 2.5 days later
-// slipped through because, at ingest time, the original had aged out of a
-// now()-relative window by 39 minutes. Backfill made it systematically worse — a
-// newly-added source ingests a week of history against a window pinned to today.
-async function isDuplicateContent(
-  canonicalUrl: string,
-  title: string,
-  publishedAt: string,
-): Promise<boolean> {
+// The only hard drop is the exact same link — there is genuinely nothing to add,
+// not even a citation. Everything else, however similar the headline, goes to the
+// clustering path to be judged.
+//
+// This used to also drop on title similarity > 0.65, which quietly defeated the
+// whole point of clustering: the most headline-identical cross-outlet pairs — the
+// ones most likely to be the same story — were discarded here before the citation
+// path ever saw them, leaving only the weaker 0.45–0.65 band able to produce a
+// citation. Exactly backwards. Worse, this path never memoized what it dropped, so
+// every dropped item was re-evaluated on every run until it aged out a week later.
+async function isDuplicateLink(canonicalUrl: string): Promise<boolean> {
   const [byUrl] = await sql`select 1 from items where canonical_url = ${canonicalUrl} limit 1`;
-  if (byUrl) return true;
-  const [byTitle] = await sql`
-    select 1 from items
-    where published_at between ${publishedAt}::timestamptz - interval '3 days'
-                           and ${publishedAt}::timestamptz + interval '3 days'
-      and similarity(lower(title), lower(${title})) > 0.65 limit 1`;
-  return Boolean(byTitle);
+  return Boolean(byUrl);
 }
 
 async function remember(sourceId: number, guid: string): Promise<null> {
@@ -708,8 +715,8 @@ async function findStoryCandidates(
 // cited on it, so an at-least-once replay counts the attachment exactly once.
 async function attachSource(itemId: number, sourceId: number, c: Candidate): Promise<boolean> {
   const rows = await sql`
-    insert into item_sources (item_id, source_id, url, title, published_at)
-    values (${itemId}, ${sourceId}, ${c.url}, ${c.title}, ${c.publishedAt})
+    insert into item_sources (item_id, source_id, guid, url, title, published_at)
+    values (${itemId}, ${sourceId}, ${c.guid}, ${c.url}, ${c.title}, ${c.publishedAt})
     on conflict (item_id, source_id) do nothing
     returning item_id`;
   return rows.length > 0;
@@ -737,8 +744,8 @@ async function publishItem(
       select id from items
        where canonical_url = ${c.canonicalUrl} and not exists (select 1 from ins)
     )
-    insert into item_sources (item_id, source_id, url, title, published_at)
-    select id, ${sourceId}, ${c.url}, ${c.title}, ${c.publishedAt}::timestamptz from target
+    insert into item_sources (item_id, source_id, guid, url, title, published_at)
+    select id, ${sourceId}, ${c.guid}, ${c.url}, ${c.title}, ${c.publishedAt}::timestamptz from target
     on conflict (item_id, source_id) do nothing`;
   return null;
 }
