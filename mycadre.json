@@ -1,8 +1,0 @@
-{
-  "worktreeDir": "../../.worktrees/pitchroots",
-  "copy": [
-    ".env.local",
-    ".vercel"
-  ],
-  "setup": "npm install"
-}
