@@ -333,7 +333,7 @@ const SAME_STORY_TOOL: Anthropic.Tool = {
       same: {
         type: "boolean",
         description:
-          "True only if both describe the SAME single event — the same match, the same signing, the same announcement. Two previews of different fixtures, or a men's and a women's edition of the same weekly column, are DIFFERENT events.",
+          "True only if both describe the SAME single event — the same match, the same signing, the same announcement. Two previews of different fixtures, or a men's and a women's edition of the same weekly column, are DIFFERENT events. A report that a club is 'in talks' or 'approaching' a transfer is NOT the same event as a confirmed signing announcement — they describe different moments in a process.",
       },
     },
     required: ["same"],
@@ -356,7 +356,13 @@ async function isSameStory(a: Candidate, b: { title: string; summary: string }):
       "You group Canadian soccer news. Two items are the same story only when they report the same single event. " +
       "Beware near-identical wording that describes different events: recurring columns (weekly reviews, match previews) " +
       "share almost all their words while covering different fixtures or different teams. " +
-      "A report and a follow-up analysis of the same match ARE the same story. When genuinely unsure, answer false — " +
+      "A report and a follow-up analysis of the same match ARE the same story. " +
+      // A rumour and its confirmation share almost every word, and the confirmation is
+      // the more newsworthy of the two — so merging them discards the better story.
+      // Measured at 0.72 title similarity, this failed roughly half the time, and
+      // always in the orientation production actually uses (existing item first).
+      "A rumour or report that a club is in talks about a transfer is a DIFFERENT event from a confirmed " +
+      "signing announcement — keep them separate. When genuinely unsure, answer false — " +
       "wrongly merging two stories loses one of them, which is worse than showing both.",
     messages: [
       {
