@@ -91,6 +91,7 @@ type SourceStats = {
   deadLinks: number;
   classified: number;
   published: number;
+  attached: number;
   dropped: number;
   error?: string;
 };
@@ -322,6 +323,57 @@ async function classify(source: SourceRow, c: Candidate): Promise<Classification
   return block.input as Classification;
 }
 
+const SAME_STORY_TOOL: Anthropic.Tool = {
+  name: "same_story",
+  description: "Judge whether two headlines describe the same underlying news event.",
+  strict: true,
+  input_schema: {
+    type: "object",
+    properties: {
+      same: {
+        type: "boolean",
+        description:
+          "True only if both describe the SAME single event — the same match, the same signing, the same announcement. Two previews of different fixtures, or a men's and a women's edition of the same weekly column, are DIFFERENT events.",
+      },
+    },
+    required: ["same"],
+    additionalProperties: false,
+  },
+};
+
+// Title similarity is a candidate filter, never the decision. The corpus contains
+// boilerplate headline templates that score higher than genuine matches do —
+// "PSL Canada Mens Review: Week 15" vs the Womens edition scores 0.85, and two
+// different match previews score 0.62, while a real cross-outlet pair on the same
+// signing scores 0.64. No threshold separates them, so a model settles it.
+async function isSameStory(a: Candidate, b: { title: string; summary: string }): Promise<boolean> {
+  const response = await claude.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 256,
+    tools: [SAME_STORY_TOOL],
+    tool_choice: { type: "tool", name: "same_story", disable_parallel_tool_use: true },
+    system:
+      "You group Canadian soccer news. Two items are the same story only when they report the same single event. " +
+      "Beware near-identical wording that describes different events: recurring columns (weekly reviews, match previews) " +
+      "share almost all their words while covering different fixtures or different teams. " +
+      "A report and a follow-up analysis of the same match ARE the same story. When genuinely unsure, answer false — " +
+      "wrongly merging two stories loses one of them, which is worse than showing both.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `A: ${a.title}\n${a.snippet || "(no excerpt)"}\n\n` +
+          `B: ${b.title}\n${b.summary}`,
+      },
+    ],
+  });
+  const block = response.content.find(
+    (bl): bl is Anthropic.ToolUseBlock => bl.type === "tool_use",
+  );
+  if (!block) throw new Error(`no tool_use block (stop_reason=${response.stop_reason})`);
+  return Boolean((block.input as { same: boolean }).same);
+}
+
 // ── durable functions ────────────────────────────────────────────────────────
 
 // poll() — the top-level durable run. Reads the active sources, then fans each
@@ -346,7 +398,7 @@ resonate.register("poll", async function poll(ctx: Context) {
         } catch (err) {
           return {
             source: s.name, fetched: 0, deadLinks: 0, classified: 0,
-            published: 0, dropped: 0, error: String(err),
+            published: 0, attached: 0, dropped: 0, error: String(err),
           } as SourceStats;
         }
       }),
@@ -355,11 +407,16 @@ resonate.register("poll", async function poll(ctx: Context) {
   }
 
   const published = results.reduce((n, r) => n + r.published, 0);
-  if (published > 0) await ctx.run(() => triggerRevalidate());
+  const attached = results.reduce((n, r) => n + r.attached, 0);
+  // Attaching a late-arriving outlet to an existing card changes what renders, so
+  // it earns a revalidate just as a new item does — otherwise a citation added
+  // hours after publication waits for the ISR timer.
+  if (published + attached > 0) await ctx.run(() => triggerRevalidate());
 
   const summary = {
     sources: results.length,
     published,
+    attached,
     classified: results.reduce((n, r) => n + r.classified, 0),
     deadLinks: results.reduce((n, r) => n + r.deadLinks, 0),
     dropped: results.reduce((n, r) => n + r.dropped, 0),
@@ -380,7 +437,8 @@ resonate.register("poll", async function poll(ctx: Context) {
 // first step that never completed; everything before it replays from Postgres.
 resonate.register("ingestSource", async function ingestSource(ctx: Context, source: SourceRow) {
   const stats: SourceStats = {
-    source: source.name, fetched: 0, deadLinks: 0, classified: 0, published: 0, dropped: 0,
+    source: source.name, fetched: 0, deadLinks: 0, classified: 0, published: 0,
+    attached: 0, dropped: 0,
   };
 
   // Durable retry with backoff: one flaky fetch shouldn't cost a source its whole
@@ -434,8 +492,38 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
     c.url = verdict.url;
     c.canonicalUrl = canonicalize(verdict.url);
 
-    const dup = (await ctx.run(() => isDuplicateContent(c.canonicalUrl, c.title))) as boolean;
+    // Same URL we already hold — nothing to add, not even a citation.
+    const dup = (await ctx.run(() =>
+      isDuplicateContent(c.canonicalUrl, c.title, c.publishedAt)
+    )) as boolean;
     if (dup) continue;
+
+    // A second outlet on a story we already carry becomes a citation on the
+    // existing card rather than a near-identical second card. This replaces the
+    // old behaviour of silently discarding it, which threw away real information
+    // (who else thought this mattered) and still left the feed looking like a
+    // republisher. Attaching also skips the classify call — the story's relevance
+    // and summary were settled when the first outlet's version was published.
+    const candidates = (await ctx.run(() =>
+      findStoryCandidates(c.title, c.publishedAt)
+    )) as StoryCandidate[];
+
+    let attachedTo: number | null = null;
+    for (const cand of candidates) {
+      const same = (await ctx.run(() => isSameStory(c, cand))) as boolean;
+      if (same) {
+        attachedTo = cand.id;
+        break;
+      }
+    }
+    if (attachedTo !== null) {
+      const added = (await ctx.run(() => attachSource(attachedTo, source.id, c))) as boolean;
+      if (added) stats.attached++;
+      // Memoize the guid or every future run re-adjudicates this same item. The
+      // rejections table is really "seen and handled without publishing".
+      await ctx.run(() => remember(source.id, c.guid));
+      continue;
+    }
 
     taken++;
 
@@ -572,12 +660,23 @@ async function alreadySeen(sourceId: number, guid: string): Promise<boolean> {
   return Boolean(rejected);
 }
 
-async function isDuplicateContent(canonicalUrl: string, title: string): Promise<boolean> {
+// The window is anchored to the candidate's own publication time, not to now().
+// Anchoring on now() made the comparison depend on when the pipeline happened to
+// run: a source that republished the same article at a new slug 2.5 days later
+// slipped through because, at ingest time, the original had aged out of a
+// now()-relative window by 39 minutes. Backfill made it systematically worse — a
+// newly-added source ingests a week of history against a window pinned to today.
+async function isDuplicateContent(
+  canonicalUrl: string,
+  title: string,
+  publishedAt: string,
+): Promise<boolean> {
   const [byUrl] = await sql`select 1 from items where canonical_url = ${canonicalUrl} limit 1`;
   if (byUrl) return true;
   const [byTitle] = await sql`
     select 1 from items
-    where published_at > now() - interval '3 days'
+    where published_at between ${publishedAt}::timestamptz - interval '3 days'
+                           and ${publishedAt}::timestamptz + interval '3 days'
       and similarity(lower(title), lower(${title})) > 0.65 limit 1`;
   return Boolean(byTitle);
 }
@@ -587,17 +686,60 @@ async function remember(sourceId: number, guid: string): Promise<null> {
   return null;
 }
 
+type StoryCandidate = { id: number; title: string; summary: string };
+
+// Cheap indexed pre-filter for the adjudicator. Deliberately looser than the
+// hard-duplicate threshold (0.65) so genuine cross-outlet pairs on the same event
+// — which sit around 0.64 once outlets reword a headline — become candidates at all.
+async function findStoryCandidates(
+  title: string,
+  publishedAt: string,
+): Promise<StoryCandidate[]> {
+  return await sql<StoryCandidate[]>`
+    select id, title, summary from items
+    where published_at between ${publishedAt}::timestamptz - interval '3 days'
+                           and ${publishedAt}::timestamptz + interval '3 days'
+      and similarity(lower(title), lower(${title})) > 0.45
+    order by similarity(lower(title), lower(${title})) desc
+    limit 3`;
+}
+
+// Attach an outlet to an existing story. Returns false when this source is already
+// cited on it, so an at-least-once replay counts the attachment exactly once.
+async function attachSource(itemId: number, sourceId: number, c: Candidate): Promise<boolean> {
+  const rows = await sql`
+    insert into item_sources (item_id, source_id, url, title, published_at)
+    values (${itemId}, ${sourceId}, ${c.url}, ${c.title}, ${c.publishedAt})
+    on conflict (item_id, source_id) do nothing
+    returning item_id`;
+  return rows.length > 0;
+}
+
 async function publishItem(
   sourceId: number,
   c: Candidate,
   summary: string,
   tags: string[],
 ): Promise<null> {
+  // The item and its first citation land together. The `target` CTE resolves the
+  // row id whether this call inserted it or a replay found it already there, so an
+  // at-least-once retry still records exactly one citation.
   await sql`
-    insert into items (source_id, guid, url, canonical_url, title, summary, tags, published_at)
-    values (${sourceId}, ${c.guid}, ${c.url}, ${c.canonicalUrl}, ${c.title},
-            ${summary}, ${tags}, ${c.publishedAt})
-    on conflict (canonical_url) do nothing`;
+    with ins as (
+      insert into items (source_id, guid, url, canonical_url, title, summary, tags, published_at)
+      values (${sourceId}, ${c.guid}, ${c.url}, ${c.canonicalUrl}, ${c.title},
+              ${summary}, ${tags}, ${c.publishedAt})
+      on conflict (canonical_url) do nothing
+      returning id
+    ), target as (
+      select id from ins
+      union all
+      select id from items
+       where canonical_url = ${c.canonicalUrl} and not exists (select 1 from ins)
+    )
+    insert into item_sources (item_id, source_id, url, title, published_at)
+    select id, ${sourceId}, ${c.url}, ${c.title}, ${c.publishedAt}::timestamptz from target
+    on conflict (item_id, source_id) do nothing`;
   return null;
 }
 

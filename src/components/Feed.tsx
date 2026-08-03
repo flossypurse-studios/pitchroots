@@ -75,6 +75,24 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
               </h2>
             </a>
             <p className="mt-1 text-[15px] leading-relaxed">{item.summary}</p>
+            {item.also?.length > 0 && (
+              <p className="mt-2 text-xs text-muted">
+                Also covered by{" "}
+                {item.also.map((o, i) => (
+                  <span key={o.url}>
+                    {i > 0 && " · "}
+                    <a
+                      href={o.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold hover:text-pitch transition-colors"
+                    >
+                      {o.name}
+                    </a>
+                  </span>
+                ))}
+              </p>
+            )}
             {item.tags.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {item.tags.map((slug) => {

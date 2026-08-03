@@ -164,3 +164,24 @@ update sources set ua_override = null
    'Globe and Mail Soccer', 'Calgary Herald Soccer',
    'The Province Soccer', 'Edmonton Journal Soccer'
  );
+
+-- 2026-08-02 (third pass) ── one item per story, citing every outlet that ran it.
+-- See PROPOSAL-story-clustering.md.
+
+-- `items` stays the story and keeps its own source as the primary attribution, so
+-- the read path is unchanged. This table holds every outlet that covered it —
+-- including the primary — so the render has one uniform shape to iterate.
+create table if not exists item_sources (
+  item_id      bigint not null references items(id) on delete cascade,
+  source_id    int    not null references sources(id),
+  url          text   not null,
+  title        text   not null,
+  published_at timestamptz not null,
+  primary key (item_id, source_id)
+);
+create index if not exists item_sources_item_idx on item_sources (item_id, published_at);
+
+-- Backfill: every existing item cites itself. Idempotent.
+insert into item_sources (item_id, source_id, url, title, published_at)
+  select i.id, i.source_id, i.url, i.title, i.published_at from items i
+on conflict (item_id, source_id) do nothing;
