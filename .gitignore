@@ -46,6 +46,3 @@ supabase/.branches/
 
 # mycadre worktree tracking (machine-local absolute paths)
 .mycadre-state.json
-
-# Local worktree tooling config (not part of the site)
-mycadre.json
