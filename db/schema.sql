@@ -218,3 +218,28 @@ alter table items add column if not exists snippet text;
 -- and the candidate query coalesces to it.
 create index if not exists items_match_trgm_idx
   on items using gin ((lower(title || ' ' || coalesce(snippet, summary))) gin_trgm_ops);
+
+-- 2026-08-03 (third pass) ── the daily audit job.
+--
+-- Every check that guards the pipeline runs once, at publish time. But external
+-- state keeps moving afterwards: published links die, feeds go quiet while still
+-- answering 200, and publishers file other sports into their soccer categories.
+-- A daily `audit` durable function re-verifies a slice of that state and writes
+-- findings here. It only ever reports — every check has a known benign false
+-- positive, so resolution (usually setting resolved_at, occasionally deleting a
+-- row) is a human decision. Unresolved findings are never duplicated by a re-run.
+create table if not exists audit_findings (
+  id bigserial primary key,
+  found_at timestamptz not null default now(),
+  kind text not null,          -- 'dead_link' | 'quiet_source' | 'empty_feed' | 'off_topic'
+  subject_id bigint,           -- item id (dead_link, off_topic) or source id (the rest)
+  detail text not null,
+  resolved_at timestamptz
+);
+-- The dedupe test every check runs: is there an open finding for this subject?
+create index if not exists audit_findings_open_idx
+  on audit_findings (kind, subject_id) where resolved_at is null;
+
+-- Drives the dead-link rotation (oldest-checked first, ~30/day, so the corpus
+-- turns over roughly weekly).
+alter table items add column if not exists last_verified_at timestamptz;

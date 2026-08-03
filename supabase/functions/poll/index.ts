@@ -598,6 +598,41 @@ resonate.register(
   },
 );
 
+// audit() — the daily external-state re-verifier, invoked by its own pg_cron job.
+// Every check that guards the pipeline runs once, at publish time — but links die
+// afterwards, feeds go quiet while still answering 200, and publishers file other
+// sports into their soccer category. None of those announce themselves. This job
+// re-checks a slice of that external state every day and writes findings to
+// audit_findings; re-running it never duplicates an unresolved finding. It only
+// ever REPORTS — each check has a known benign false positive (a transient fetch
+// error looks like a dead link; a soccer story can live under /hockey/ when its
+// subject is a hockey figure; a provincial feed can be legitimately quiet), so
+// deletion is a human decision.
+const AUDIT_LINK_SLICE = 30; // ~daily slice; the corpus turns over about weekly
+const AUDIT_QUIET_DAYS = 7;
+const AUDIT_EMPTY_STREAK = 3;
+
+resonate.register("audit", async function audit(ctx: Context) {
+  // Dead links: re-verify a rolling slice of items, oldest-checked first. Each
+  // fetch and each write is its own checkpoint, so a crash mid-slice resumes
+  // where it left off without re-fetching.
+  const slice = (await ctx.run(() => getLinkAuditSlice())) as
+    { id: number; url: string; source: SourceRow }[];
+  let dead = 0;
+  for (const row of slice) {
+    const verdict = (await ctx.run(() => verifyLink(row.source, row.url))) as
+      { ok: boolean; url: string };
+    if (!verdict.ok) dead++;
+    await ctx.run(() => recordLinkCheck(row.id, row.url, verdict.ok));
+  }
+
+  const quiet = (await ctx.run(() => flagQuietSources())) as number;
+  const empty = (await ctx.run(() => flagEmptyFeeds())) as number;
+  const offTopic = (await ctx.run(() => flagOffTopicItems())) as number;
+
+  return { linksChecked: slice.length, dead, quiet, empty, offTopic };
+});
+
 resonate.httpHandler();
 
 // ── data access (plain SQL; each is called inside a ctx.run) ─────────────────
@@ -787,6 +822,94 @@ async function publishItem(
 // pages so the new items show up without waiting for the ISR timer. Bearer-
 // protected; a lost ping just means the pages refresh on their normal 15-min
 // timer instead of immediately.
+// The link-audit rotation: items least-recently verified come first, never-verified
+// before all of them. The source row rides along because verifyLink needs the
+// source's UA and rewrite rule (re-applying a rewrite to an already-rewritten URL
+// is a no-op — the from-pattern no longer matches).
+async function getLinkAuditSlice(): Promise<{ id: number; url: string; source: SourceRow }[]> {
+  return await sql<{ id: number; url: string; source: SourceRow }[]>`
+    select i.id, i.url, row_to_json(s.*) as source
+    from items i join sources s on s.id = i.source_id
+    order by i.last_verified_at asc nulls first, i.id asc
+    limit ${AUDIT_LINK_SLICE}`;
+}
+
+// Stamp the check regardless of outcome (that is what drives the rotation), and
+// record a finding only for hard-dead links — verifyLink already gives transient
+// failures the benefit of the doubt. Never flag the same unresolved link twice.
+async function recordLinkCheck(itemId: number, url: string, ok: boolean): Promise<null> {
+  await sql`update items set last_verified_at = now() where id = ${itemId}`;
+  if (!ok) {
+    await sql`
+      insert into audit_findings (kind, subject_id, detail)
+      select 'dead_link', ${itemId}, ${url}
+      where not exists (
+        select 1 from audit_findings
+        where kind = 'dead_link' and subject_id = ${itemId} and resolved_at is null)`;
+  }
+  return null;
+}
+
+// Active sources with no published or attached item in AUDIT_QUIET_DAYS. A signal,
+// not an error — provincial associations are legitimately low-volume — so after a
+// finding is resolved the source gets a week of grace before it can be re-flagged,
+// rather than nagging daily about a condition someone already looked at.
+async function flagQuietSources(): Promise<number> {
+  const rows = await sql`
+    insert into audit_findings (kind, subject_id, detail)
+    select 'quiet_source', s.id,
+           s.name || ': no items in ' || ${AUDIT_QUIET_DAYS} || ' days (may be legitimately low-volume)'
+    from sources s
+    where s.active and not s.retired
+      and not exists (
+        select 1 from item_sources x
+        where x.source_id = s.id
+          and x.published_at >= now() - make_interval(days => ${AUDIT_QUIET_DAYS}))
+      and not exists (
+        select 1 from audit_findings f
+        where f.kind = 'quiet_source' and f.subject_id = s.id
+          and (f.resolved_at is null or f.resolved_at > now() - make_interval(days => ${AUDIT_QUIET_DAYS})))
+    returning id`;
+  return rows.length;
+}
+
+// Sources answering 200 with an empty channel for several consecutive polls.
+// empty_streak already exists and parks the source at the same threshold as hard
+// failures; this surfaces the ones drifting toward it. Same post-resolution grace
+// as quiet_source.
+async function flagEmptyFeeds(): Promise<number> {
+  const rows = await sql`
+    insert into audit_findings (kind, subject_id, detail)
+    select 'empty_feed', s.id, s.name || ': empty_streak = ' || s.empty_streak
+    from sources s
+    where s.active and s.empty_streak > ${AUDIT_EMPTY_STREAK}
+      and not exists (
+        select 1 from audit_findings f
+        where f.kind = 'empty_feed' and f.subject_id = s.id
+          and (f.resolved_at is null or f.resolved_at > now() - make_interval(days => ${AUDIT_QUIET_DAYS})))
+    returning id`;
+  return rows.length;
+}
+
+// Items whose canonical URL path names another sport. This exact heuristic found
+// two live leaks that a title-keyword sweep missed — but a genuine soccer story CAN
+// be filed under another sport's section (a Whitecaps ownership story lived under
+// /hockey/nhl/ because the buyer was a former Canucks owner), which is why this
+// reports for review and never deletes. The URL of a given item never changes, so
+// once a finding exists for an item — resolved or not — it is never re-raised.
+async function flagOffTopicItems(): Promise<number> {
+  const rows = await sql`
+    insert into audit_findings (kind, subject_id, detail)
+    select 'off_topic', i.id, i.canonical_url
+    from items i
+    where i.canonical_url ~* '/(hockey|golf|cfl|nfl|basketball|baseball|curling)/'
+      and not exists (
+        select 1 from audit_findings f
+        where f.kind = 'off_topic' and f.subject_id = i.id)
+    returning id`;
+  return rows.length;
+}
+
 async function triggerRevalidate(): Promise<null> {
   const url = Deno.env.get("REVALIDATE_URL");
   const secret = Deno.env.get("REVALIDATE_SECRET");
