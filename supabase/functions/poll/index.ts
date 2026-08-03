@@ -362,7 +362,17 @@ async function isSameStory(a: Candidate, b: { title: string; summary: string }):
       // Measured at 0.72 title similarity, this failed roughly half the time, and
       // always in the orientation production actually uses (existing item first).
       "A rumour or report that a club is in talks about a transfer is a DIFFERENT event from a confirmed " +
-      "signing announcement — keep them separate. When genuinely unsure, answer false — " +
+      "signing announcement — keep them separate. " +
+      // Matching on body text raised recall sharply but pulled in pairs that merely
+      // share a club and a week. The two that actually mislead: a preview and a
+      // report of the same fixture (merging them files a finished match under a
+      // preview headline, since the earlier item becomes the card), and recurring
+      // roundup columns, which mention a story without being about it.
+      "An item written BEFORE a match — a preview, projected lineups, a ticket or attendance story — is a " +
+      "DIFFERENT event from one written AFTER it, such as a report, reaction, or player quotes. " +
+      "A recurring roundup column that gathers several topics under a standing title and a date is never the " +
+      "same event as a specific news story, even when it mentions that story. " +
+      "When genuinely unsure, answer false — " +
       "wrongly merging two stories loses one of them, which is worse than showing both.",
     messages: [
       {
@@ -509,7 +519,7 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
     // republisher. Attaching also skips the classify call — the story's relevance
     // and summary were settled when the first outlet's version was published.
     const candidates = (await ctx.run(() =>
-      findStoryCandidates(c.title, c.publishedAt)
+      findStoryCandidates(c.title, c.snippet, c.publishedAt)
     )) as StoryCandidate[];
 
     let attachedTo: number | null = null;
@@ -701,19 +711,36 @@ async function remember(sourceId: number, guid: string): Promise<null> {
 
 type StoryCandidate = { id: number; title: string; summary: string };
 
-// Cheap indexed pre-filter for the adjudicator. Deliberately looser than the
-// hard-duplicate threshold (0.65) so genuine cross-outlet pairs on the same event
-// — which sit around 0.64 once outlets reword a headline — become candidates at all.
+// Pre-filter for the adjudicator, matched on headline PLUS the article's opening
+// text. Headlines alone were the wrong signal: outlets word them deliberately
+// differently, so real same-event pairs measured 0.14–0.43 while *distinct* stories
+// sharing a template measured up to 0.87 — the bands overlapped so completely that
+// no threshold separated them, and at the old 0.45 not one known duplicate was even
+// considered. Including body text moved every measured same-story pair up and most
+// distinct pairs down, because a shared headline template gets diluted by the parts
+// that actually differ. Both sides are truncated to keep the comparison balanced —
+// trigram similarity falls off when one side is much longer than the other.
+const MATCH_CHARS = 300;
+const STORY_MATCH_THRESHOLD = 0.30;
+
 async function findStoryCandidates(
   title: string,
+  snippet: string,
   publishedAt: string,
 ): Promise<StoryCandidate[]> {
+  const probe = `${title} ${snippet}`.slice(0, MATCH_CHARS);
   return await sql<StoryCandidate[]>`
     select id, title, summary from items
     where published_at between ${publishedAt}::timestamptz - interval '3 days'
                            and ${publishedAt}::timestamptz + interval '3 days'
-      and similarity(lower(title), lower(${title})) > 0.45
-    order by similarity(lower(title), lower(${title})) desc
+      and similarity(
+            left(lower(title || ' ' || coalesce(snippet, summary)), ${MATCH_CHARS}),
+            lower(${probe})
+          ) > ${STORY_MATCH_THRESHOLD}
+    order by similarity(
+            left(lower(title || ' ' || coalesce(snippet, summary)), ${MATCH_CHARS}),
+            lower(${probe})
+          ) desc
     limit 3`;
 }
 
@@ -739,9 +766,9 @@ async function publishItem(
   // at-least-once retry still records exactly one citation.
   await sql`
     with ins as (
-      insert into items (source_id, guid, url, canonical_url, title, summary, tags, published_at)
+      insert into items (source_id, guid, url, canonical_url, title, summary, snippet, tags, published_at)
       values (${sourceId}, ${c.guid}, ${c.url}, ${c.canonicalUrl}, ${c.title},
-              ${summary}, ${tags}, ${c.publishedAt})
+              ${summary}, ${c.snippet}, ${tags}, ${c.publishedAt})
       on conflict (canonical_url) do nothing
       returning id
     ), target as (

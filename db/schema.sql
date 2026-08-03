@@ -202,3 +202,19 @@ update item_sources x set guid = i.guid
 
 -- Attachment count as a queryable column rather than buried in per_source JSONB.
 alter table run_log add column if not exists attached int;
+
+-- 2026-08-03 (second pass) ── match stories on body text, not just headlines.
+--
+-- Headline similarity turned out to be a poor proxy for "same event": outlets
+-- deliberately word headlines differently, so "Whitecaps Procure Poku" and
+-- "Vancouver Whitecaps acquire Canadian Kwasi Poku from RWDM Brussels" scored 0.22
+-- while two previews of *different* matches sharing a template scored 0.87. Adding
+-- the article's opening text inverts both: every measured same-story pair rose, and
+-- most distinct pairs fell, because the shared boilerplate gets diluted by the parts
+-- that actually differ.
+alter table items add column if not exists snippet text;
+
+-- Existing rows predate the column; their own-words summary is the closest stand-in,
+-- and the candidate query coalesces to it.
+create index if not exists items_match_trgm_idx
+  on items using gin ((lower(title || ' ' || coalesce(snippet, summary))) gin_trgm_ops);
