@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
-import { NAV_TAGS, TAGS } from "@/lib/tags";
+import { NavPills } from "@/components/NavPills";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { TAGS } from "@/lib/tags";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -84,29 +86,33 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${archivo.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
+        {/* Re-stamp a saved theme choice before anything paints, so a reader who
+            picked the non-system theme never sees a flash of the wrong one. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}",
+          }}
+        />
         <header className="border-b-4 border-pitch">
           <div className="mx-auto w-full max-w-3xl px-4 pt-6 pb-4">
-            <Link href="/" className="inline-block">
-              <span className="font-display font-black text-3xl tracking-tight">
-                Pitch<span className="text-pitch">Roots</span>
-              </span>
-            </Link>
-            <p className="mt-1 text-sm text-muted">
+            <div className="flex items-start justify-between gap-4">
+              <Link href="/" className="inline-block">
+                <span className="font-display font-black text-3xl tracking-tight">
+                  Pitch<span className="text-pitch">Roots</span>
+                </span>
+              </Link>
+              <ThemeToggle />
+            </div>
+            {/* Hidden on mobile: the tagline costs two wrapped lines there, and the
+                title tag + meta description already carry it for first-time arrivals. */}
+            <p className="mt-1 hidden text-sm text-muted sm:block">
               Canadian soccer, one feed. Every story links to its source.
             </p>
-            <nav className="mt-4 flex flex-wrap gap-2 text-sm" aria-label="Leagues and competitions">
-              {NAV_TAGS.map((t) => (
-                <Link
-                  key={t.slug}
-                  href={`/${t.slug}`}
-                  className="rounded-full border border-line px-3 py-1 font-medium hover:border-pitch hover:text-pitch transition-colors"
-                >
-                  {t.label}
-                </Link>
-              ))}
-            </nav>
+            <NavPills />
           </div>
         </header>
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
@@ -114,19 +120,18 @@ export default function RootLayout({
           <div className="mx-auto w-full max-w-3xl px-4 py-6 text-sm text-muted space-y-4">
             {FOOTER_GROUPS.map((group) => (
               <nav key={group.heading} aria-label={group.heading}>
-                <span className="font-semibold">{group.heading}:</span>{" "}
-                {group.slugs.map((slug, i) => {
-                  const t = TAGS.find((x) => x.slug === slug);
-                  if (!t) return null;
-                  return (
-                    <span key={slug}>
-                      {i > 0 && " · "}
-                      <Link href={`/${slug}`} className="hover:text-pitch">
+                <span className="font-semibold">{group.heading}:</span>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                  {group.slugs.map((slug) => {
+                    const t = TAGS.find((x) => x.slug === slug);
+                    if (!t) return null;
+                    return (
+                      <Link key={slug} href={`/${slug}`} className="hover:text-pitch">
                         {t.group === "province" ? t.label : `${t.label} news`}
                       </Link>
-                    </span>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </nav>
             ))}
             <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 border-t border-line">

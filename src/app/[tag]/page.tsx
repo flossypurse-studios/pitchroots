@@ -57,7 +57,7 @@ export default async function TagPage({
     <>
       <div className="mb-6">
         <h1 className="font-display font-black text-2xl">{def.label}</h1>
-        <p className="text-sm text-muted mt-1">{def.blurb}</p>
+        <p className="text-base text-muted mt-1">{def.blurb}</p>
       </div>
       <Feed items={items} initial={items.length} />
     </>

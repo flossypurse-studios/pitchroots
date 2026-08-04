@@ -45,6 +45,9 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
+      {/* Deliberately a small section label rather than a display heading: the
+          card headlines are the page's real visual anchors, and the h1 exists to
+          name the page for semantics and search, not to compete with them. */}
       <h1 className="font-display font-bold text-sm uppercase tracking-widest text-pitch mb-4">
         The latest in Canadian soccer
       </h1>

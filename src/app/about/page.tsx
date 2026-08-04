@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   return (
-    <article className="prose-sm max-w-none space-y-4 leading-relaxed">
+    <article className="space-y-4 leading-relaxed">
       <h1 className="font-display font-black text-2xl">About PitchRoots</h1>
       <p>
         PitchRoots is a Canada-wide soccer news feed. It answers one question:{" "}

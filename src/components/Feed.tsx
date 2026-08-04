@@ -69,12 +69,12 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
               </time>
             </div>
             <a href={item.url} target="_blank" rel="noopener noreferrer">
-              <h2 className="font-display font-bold text-lg leading-snug hover:text-pitch transition-colors">
+              <h2 className="font-display font-bold text-xl leading-snug hover:text-pitch transition-colors">
                 {item.title}
                 <span className="text-pitch"> ↗</span>
               </h2>
             </a>
-            <p className="mt-1 text-[15px] leading-relaxed">{item.summary}</p>
+            <p className="mt-1 text-sm leading-relaxed">{item.summary}</p>
             {item.also?.length > 0 && (
               <p className="mt-2 text-xs text-muted">
                 Also covered by{" "}
@@ -85,7 +85,7 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
                       href={o.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold hover:text-pitch transition-colors"
+                      className="font-semibold underline hover:text-pitch transition-colors"
                     >
                       {o.name}
                     </a>
@@ -94,7 +94,7 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
               </p>
             )}
             {item.tags.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {item.tags.map((slug) => {
                   const def = tagBySlug(slug);
                   if (!def) return null;

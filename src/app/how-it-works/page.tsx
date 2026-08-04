@@ -27,7 +27,7 @@ const DIAGRAM = `  WRITE LOOP  (durable, hourly)              READ LOOP  (every 
 
 export default function HowItWorksPage() {
   return (
-    <article className="prose-sm max-w-none space-y-5 leading-relaxed">
+    <article className="space-y-5 leading-relaxed">
       <h1 className="font-display font-black text-2xl">How PitchRoots is built</h1>
 
       <p>

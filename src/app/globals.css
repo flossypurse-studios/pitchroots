@@ -23,8 +23,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Theme resolution: an explicit choice (html[data-theme], set by the header
+   toggle and re-stamped before first paint from localStorage) beats the system
+   preference; with no choice, the system preference applies. The dark values
+   appear twice below — keep both blocks in lockstep. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #101410;
     --foreground: #e9ede8;
     --muted: #96a198;
@@ -33,6 +37,36 @@
     --pitch-strong: #7dd99b;
     --card: #161b16;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #101410;
+  --foreground: #e9ede8;
+  --muted: #96a198;
+  --line: #232a24;
+  --pitch: #46b96e;
+  --pitch-strong: #7dd99b;
+  --card: #161b16;
+}
+
+/* The theme toggle shows the icon for the mode you'd switch TO, resolved by the
+   same rules as the palette so it never needs JS state. */
+.theme-icon-sun {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-icon-sun {
+    display: block;
+  }
+  :root:not([data-theme="light"]) .theme-icon-moon {
+    display: none;
+  }
+}
+:root[data-theme="dark"] .theme-icon-sun {
+  display: block;
+}
+:root[data-theme="dark"] .theme-icon-moon {
+  display: none;
 }
 
 body {
