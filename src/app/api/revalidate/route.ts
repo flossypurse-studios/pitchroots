@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
   revalidatePath("/");
+  revalidatePath("/games");
   for (const slug of TAG_SLUGS) revalidatePath(`/${slug}`);
-  return Response.json({ revalidated: true, paths: 1 + TAG_SLUGS.length });
+  return Response.json({ revalidated: true, paths: 2 + TAG_SLUGS.length });
 }

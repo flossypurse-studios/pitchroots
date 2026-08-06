@@ -243,3 +243,50 @@ create index if not exists audit_findings_open_idx
 -- Drives the dead-link rotation (oldest-checked first, ~30/day, so the corpus
 -- turns over roughly weekly).
 alter table items add column if not exists last_verified_at timestamptz;
+
+-- 2026-08-06 ── the games calendar (SPEC §2: an approved surface, not scope drift).
+--
+-- Upcoming Canadian home games with ticket links, synced daily from the
+-- Ticketmaster Discovery API by the `pollGames` durable function. One row per
+-- provider event; the sync upserts, so reschedules, cancellations, and ticket-URL
+-- changes overwrite in place. Everything soccer-in-Canada is stored — including
+-- events we can't map to a known competition (`competition = 'other'`) — but the
+-- read side renders only the mapped competitions, so coverage can widen later
+-- without re-fetching history.
+create table if not exists games (
+  id bigserial primary key,
+  provider text not null default 'ticketmaster',
+  provider_event_id text not null,
+  -- 'mls' | 'canpl' | 'nsl' | 'canmnt' | 'canwnt' | 'other' — reuses the news tag
+  -- slugs so a competition pill can link straight to its news hub.
+  competition text not null,
+  name text not null,
+  home_team text,
+  away_team text,
+  kickoff_at timestamptz,
+  -- Venue-local IANA timezone from the provider; kickoff renders in the venue's
+  -- own zone (a national calendar shows Halifax games in AT, Vancouver in PT).
+  timezone text,
+  venue text,
+  city text,
+  province text,
+  ticket_url text not null,
+  -- Provider sale status: onsale | offsale | canceled | postponed | rescheduled.
+  status text not null default 'onsale',
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  unique (provider, provider_event_id)
+);
+create index if not exists games_kickoff_idx on games (kickoff_at);
+
+-- Per-run sync summary, same pattern and rationale as run_log: Resonate GCs
+-- promises after ~24h, and a games sync that silently fails every day is a
+-- calendar quietly going stale — only positive evidence (a recent row here)
+-- says the sync is alive.
+create table if not exists games_run_log (
+  origin_id text primary key,
+  ran_at timestamptz not null default now(),
+  fetched int, mapped int, upserted int,
+  by_competition jsonb
+);
+create index if not exists games_run_log_ran_at_idx on games_run_log (ran_at desc);

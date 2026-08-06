@@ -633,6 +633,141 @@ resonate.register("audit", async function audit(ctx: Context) {
   return { linksChecked: slice.length, dead, quiet, empty, offTopic };
 });
 
+// pollGames() — the daily games-calendar sync, invoked by its own pg_cron job.
+// Fetches every upcoming soccer event in Canada from the Ticketmaster Discovery
+// API (one integration covers the Canadian MLS clubs, most CPL and NSL home
+// dates, and national-team games — and the ticket link is the payload, not
+// something to hunt for), maps each event to a competition in plain code, and
+// upserts. Fixtures move — reschedules, cancellations, new onsales — so the
+// upsert overwrites in place rather than insert-only; replaying a completed
+// step rewrites identical values, which keeps it safe under at-least-once
+// side effects. No LLM in this path: the provider data is structured and the
+// club map is deterministic, so a sync run costs nothing but HTTP.
+const TM_PAGE_SIZE = 200; // provider max; all upcoming CA soccer fits in 1-2 pages
+const TM_MAX_PAGES = 5; // deep-paging cap is size*page < 1000 anyway
+
+// Club → competition, matched against attraction names and the event title.
+// Slugs deliberately reuse the news tag vocabulary. An unmatched event is kept
+// as 'other' (stored, never rendered) so widening coverage later is a mapping
+// change, not a re-fetch. Ordered: exclusions must run before club patterns
+// because reserve sides share their parent club's name.
+const GAME_EXCLUDE = /parking|tailgate|suite|vip package|season|flex pack|membership|camp\b|viewing party/i;
+const RESERVE_SIDE = /\bII\b|\bFC 2\b|academy/i;
+const TEAM_COMPETITION: [RegExp, string][] = [
+  [/toronto fc/i, "mls"],
+  [/whitecaps/i, "mls"],
+  [/cf montr[eé]al/i, "mls"],
+  [/atl[eé]tico ottawa/i, "canpl"],
+  [/cavalry/i, "canpl"],
+  [/forge/i, "canpl"],
+  [/halifax wanderers|hfx wanderers/i, "canpl"],
+  [/pacific fc/i, "canpl"],
+  [/valour/i, "canpl"],
+  [/vancouver fc/i, "canpl"],
+  [/york united/i, "canpl"],
+  [/afc toronto/i, "nsl"],
+  [/calgary wild/i, "nsl"],
+  [/halifax tides/i, "nsl"],
+  [/montreal roses|roses de montr[eé]al/i, "nsl"],
+  [/ottawa rapid/i, "nsl"],
+  [/vancouver rise/i, "nsl"],
+  [/canad(a|ian).*women.*national|canwnt/i, "canwnt"],
+  [/canad(a|ian).*men.*national|canmnt/i, "canmnt"],
+];
+
+// Slim, JSON-serializable shape — the raw provider event is far too large to
+// checkpoint 200 at a time.
+type GameRow = {
+  providerEventId: string;
+  competition: string;
+  name: string;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  kickoffAt: string | null; // ISO
+  timezone: string | null;
+  venue: string | null;
+  city: string | null;
+  province: string | null;
+  ticketUrl: string;
+  status: string;
+};
+
+function mapCompetition(names: string[]): string {
+  for (const n of names) {
+    if (RESERVE_SIDE.test(n)) return "other";
+  }
+  for (const n of names) {
+    for (const [re, slug] of TEAM_COMPETITION) {
+      if (re.test(n)) return slug;
+    }
+  }
+  return "other";
+}
+
+// deno-lint-ignore no-explicit-any
+function mapEvent(ev: any): GameRow | null {
+  const name: string = ev?.name ?? "";
+  const url: string = ev?.url ?? "";
+  if (!ev?.id || !name || !url) return null;
+  if (GAME_EXCLUDE.test(name)) return null;
+  const attractions: string[] = (ev?._embedded?.attractions ?? [])
+    .map((a: { name?: string }) => a?.name ?? "")
+    .filter(Boolean);
+  // Provider convention: attractions[0] is the home side. Fall back to splitting
+  // the event title, whose "Home vs. Away" ordering follows the same convention.
+  const vsSplit = name.split(/\s+(?:vs\.?|v\.)\s+/i);
+  const homeTeam = attractions[0] ?? (vsSplit.length === 2 ? vsSplit[0].trim() : null);
+  const awayTeam = attractions[1] ?? (vsSplit.length === 2 ? vsSplit[1].trim() : null);
+  const venue = ev?._embedded?.venues?.[0];
+  return {
+    providerEventId: String(ev.id),
+    competition: mapCompetition([...attractions, name]),
+    name,
+    homeTeam,
+    awayTeam,
+    kickoffAt: ev?.dates?.start?.dateTime ?? null,
+    timezone: ev?.dates?.timezone ?? null,
+    venue: venue?.name ?? null,
+    city: venue?.city?.name ?? null,
+    province: venue?.state?.stateCode ?? null,
+    ticketUrl: url,
+    status: ev?.dates?.status?.code ?? "onsale",
+  };
+}
+
+resonate.register("pollGames", async function pollGames(ctx: Context) {
+  // Deploy-before-key guard: without the secret the run reports itself skipped
+  // rather than failing — the schedule can be armed before the key exists.
+  if (!Deno.env.get("TICKETMASTER_API_KEY")) {
+    return { skipped: "TICKETMASTER_API_KEY not set" };
+  }
+
+  // Checkpointed clock, same rule as ingestSource: every replay must query the
+  // same window.
+  const now = (await ctx.run(() => Date.now())) as number;
+
+  const rows: GameRow[] = [];
+  let totalPages = 1;
+  for (let page = 0; page < totalPages && page < TM_MAX_PAGES; page++) {
+    const res = (await ctx.run(() => fetchGamesPage(now, page))) as {
+      totalPages: number;
+      rows: GameRow[];
+    };
+    totalPages = res.totalPages;
+    rows.push(...res.rows);
+  }
+
+  const upserted = (await ctx.run(() => upsertGames(rows))) as number;
+  // New games or moved kickoffs should show without waiting for the ISR timer.
+  if (rows.length > 0) await ctx.run(() => triggerRevalidate());
+
+  const byCompetition: Record<string, number> = {};
+  for (const r of rows) byCompetition[r.competition] = (byCompetition[r.competition] ?? 0) + 1;
+  const summary = { fetched: rows.length, mapped: rows.filter((r) => r.competition !== "other").length, upserted, byCompetition };
+  await ctx.run(() => logGamesRun(ctx.originId, summary));
+  return summary;
+});
+
 resonate.httpHandler();
 
 // ── data access (plain SQL; each is called inside a ctx.run) ─────────────────
@@ -908,6 +1043,79 @@ async function flagOffTopicItems(): Promise<number> {
         where f.kind = 'off_topic' and f.subject_id = i.id)
     returning id`;
   return rows.length;
+}
+
+// One Discovery API page of upcoming soccer-in-Canada events, already mapped to
+// the slim GameRow shape (the raw payload is too large to checkpoint). The
+// startDateTime derives from the checkpointed run clock, so a replay requests
+// the same window. Ticketmaster rejects fractional seconds in datetimes.
+async function fetchGamesPage(
+  now: number,
+  page: number,
+): Promise<{ totalPages: number; rows: GameRow[] }> {
+  const start = new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const params = new URLSearchParams({
+    apikey: Deno.env.get("TICKETMASTER_API_KEY")!,
+    classificationName: "Soccer",
+    countryCode: "CA",
+    startDateTime: start,
+    sort: "date,asc",
+    size: String(TM_PAGE_SIZE),
+    page: String(page),
+  });
+  const res = await fetch(
+    `https://app.ticketmaster.com/discovery/v2/events.json?${params}`,
+    { signal: AbortSignal.timeout(20_000) },
+  );
+  if (!res.ok) throw new Error(`Ticketmaster HTTP ${res.status}`);
+  const doc = await res.json();
+  const events: unknown[] = doc?._embedded?.events ?? [];
+  return {
+    totalPages: doc?.page?.totalPages ?? 1,
+    rows: events.map(mapEvent).filter((r): r is GameRow => r !== null),
+  };
+}
+
+// Upsert the day's snapshot. Insert-or-overwrite on the provider event id:
+// fixtures reschedule, venues change, sale status flips — the latest snapshot
+// wins, and a replayed step rewrites identical values.
+async function upsertGames(rows: GameRow[]): Promise<number> {
+  let n = 0;
+  for (const r of rows) {
+    const res = await sql`
+      insert into games (provider, provider_event_id, competition, name, home_team, away_team,
+                         kickoff_at, timezone, venue, city, province, ticket_url, status, last_seen_at)
+      values ('ticketmaster', ${r.providerEventId}, ${r.competition}, ${r.name}, ${r.homeTeam},
+              ${r.awayTeam}, ${r.kickoffAt}, ${r.timezone}, ${r.venue}, ${r.city}, ${r.province},
+              ${r.ticketUrl}, ${r.status}, now())
+      on conflict (provider, provider_event_id) do update set
+        competition = excluded.competition,
+        name = excluded.name,
+        home_team = excluded.home_team,
+        away_team = excluded.away_team,
+        kickoff_at = excluded.kickoff_at,
+        timezone = excluded.timezone,
+        venue = excluded.venue,
+        city = excluded.city,
+        province = excluded.province,
+        ticket_url = excluded.ticket_url,
+        status = excluded.status,
+        last_seen_at = now()
+      returning id`;
+    n += res.length;
+  }
+  return n;
+}
+
+async function logGamesRun(
+  originId: string,
+  s: { fetched: number; mapped: number; upserted: number; byCompetition: Record<string, number> },
+): Promise<null> {
+  await sql`
+    insert into games_run_log (origin_id, fetched, mapped, upserted, by_competition)
+    values (${originId}, ${s.fetched}, ${s.mapped}, ${s.upserted}, ${sql.json(s.byCompetition)})
+    on conflict (origin_id) do nothing`;
+  return null;
 }
 
 async function triggerRevalidate(): Promise<null> {

@@ -3,6 +3,7 @@ import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { NavPills } from "@/components/NavPills";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { hasUpcomingGames } from "@/lib/db";
 import { TAGS } from "@/lib/tags";
 import "./globals.css";
 
@@ -77,11 +78,15 @@ const FOOTER_GROUPS: { heading: string; slugs: string[] }[] = [
   },
 ];
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // The games calendar surfaces sitewide (nav pill, footer link) only once the
+  // daily sync has actual upcoming games — an empty calendar linked from every
+  // page is worse than no calendar. Re-checked whenever a page revalidates.
+  const showGames = await hasUpcomingGames();
   return (
     <html
       lang="en"
@@ -112,7 +117,7 @@ export default function RootLayout({
             <p className="mt-1 hidden text-sm text-muted sm:block">
               Canadian soccer, one feed. Every story links to its source.
             </p>
-            <NavPills />
+            <NavPills showGames={showGames} />
           </div>
         </header>
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
@@ -135,6 +140,9 @@ export default function RootLayout({
               </nav>
             ))}
             <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 border-t border-line">
+              {showGames && (
+                <Link href="/games" className="hover:text-pitch">Games &amp; tickets</Link>
+              )}
               <Link href="/about" className="hover:text-pitch">About</Link>
               <Link href="/how-it-works" className="hover:text-pitch">How it&apos;s built</Link>
               <a href="/feed.xml" className="hover:text-pitch">RSS</a>

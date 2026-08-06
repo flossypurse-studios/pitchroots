@@ -29,6 +29,60 @@ export type FeedItem = {
   also: { name: string; url: string }[];
 };
 
+export type Game = {
+  id: number;
+  competition: string;
+  name: string;
+  home_team: string | null;
+  away_team: string | null;
+  kickoff_at: Date;
+  timezone: string | null;
+  venue: string | null;
+  city: string | null;
+  province: string | null;
+  ticket_url: string;
+  status: string;
+};
+
+// The competitions the calendar renders. Everything else in `games` (friendlies
+// we can't map, reserve sides) is stored but stays off the page until the
+// mapping in the worker deliberately widens.
+const GAME_COMPETITIONS = ["mls", "canpl", "nsl", "canmnt", "canwnt"];
+
+export async function upcomingGames(limit = 200): Promise<Game[]> {
+  const q = sql();
+  // Kickoff minus 4h keeps today's game on the page until it's over; canceled
+  // and postponed events drop out (a postponed game has no trustworthy date).
+  const rows = await q`
+    select id, competition, name, home_team, away_team, kickoff_at, timezone,
+           venue, city, province, ticket_url, status
+    from games
+    where kickoff_at >= now() - interval '4 hours'
+      and status not in ('canceled', 'cancelled', 'postponed')
+      and competition = any(${GAME_COMPETITIONS})
+    order by kickoff_at asc
+    limit ${limit}`;
+  return rows as unknown as Game[];
+}
+
+// Gates the nav pill, footer link, and sitemap entry: the calendar surfaces
+// sitewide only once it has something to show. Never throws — a read failure
+// hides the link rather than breaking every page's layout.
+export async function hasUpcomingGames(): Promise<boolean> {
+  try {
+    const q = sql();
+    const [row] = await q`
+      select 1 as present from games
+      where kickoff_at >= now()
+        and status not in ('canceled', 'cancelled', 'postponed')
+        and competition = any(${GAME_COMPETITIONS})
+      limit 1`;
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
 export async function latestItems(opts: { tag?: string; limit?: number } = {}): Promise<FeedItem[]> {
   const q = sql();
   const limit = opts.limit ?? 100;

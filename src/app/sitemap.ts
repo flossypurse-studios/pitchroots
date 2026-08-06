@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { sql } from "@/lib/db";
+import { hasUpcomingGames, sql } from "@/lib/db";
 import { TAGS } from "@/lib/tags";
 
 export const revalidate = 3600;
@@ -20,6 +20,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: SITE, lastModified: home, changeFrequency: "hourly", priority: 1 },
     { url: `${SITE}/about`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE}/how-it-works`, changeFrequency: "monthly", priority: 0.3 },
+    // Same rule as empty tag hubs: the calendar joins the sitemap only once it
+    // has upcoming games (until then the page is noindexed and unlinked).
+    ...((await hasUpcomingGames())
+      ? [{ url: `${SITE}/games`, changeFrequency: "daily" as const, priority: 0.7 }]
+      : []),
     // Only submit hubs that actually have items. `lastByTag` is built from a query
     // grouped over existing items, so an empty hub is simply absent from it. Before
     // this filter, empty hubs were not only listed but stamped with the whole feed's
