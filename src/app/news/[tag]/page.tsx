@@ -34,12 +34,12 @@ export async function generateMetadata({
   return {
     title: `${def.label} news`,
     description,
-    alternates: { canonical: `/${tag}` },
+    alternates: { canonical: `/news/${tag}` },
     ...(isEmpty ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       title: `${def.label} news — PitchRoots`,
       description,
-      url: `/${tag}`,
+      url: `/news/${tag}`,
     },
   };
 }

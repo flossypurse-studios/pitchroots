@@ -17,7 +17,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const home = overall?.last ? new Date(overall.last) : new Date();
 
   return [
-    { url: SITE, lastModified: home, changeFrequency: "hourly", priority: 1 },
+    { url: SITE, lastModified: home, changeFrequency: "daily", priority: 1 },
+    { url: `${SITE}/news`, lastModified: home, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE}/about`, changeFrequency: "monthly", priority: 0.3 },
     { url: `${SITE}/how-it-works`, changeFrequency: "monthly", priority: 0.3 },
     // Same rule as empty tag hubs: the calendar joins the sitemap only once it
@@ -30,7 +31,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // this filter, empty hubs were not only listed but stamped with the whole feed's
     // latest timestamp — telling Google a content-free page had just been updated.
     ...TAGS.filter((t) => lastByTag.has(t.slug)).map((t) => ({
-      url: `${SITE}/${t.slug}`,
+      url: `${SITE}/news/${t.slug}`,
       lastModified: lastByTag.get(t.slug) ?? home,
       changeFrequency: "hourly" as const,
       priority: 0.7,

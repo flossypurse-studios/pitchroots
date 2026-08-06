@@ -107,7 +107,7 @@ export default function HowItWorksPage() {
       </p>
 
       <p className="pt-4 text-sm">
-        <Link href="/" className="text-pitch underline">← Back to the feed</Link>
+        <Link href="/news" className="text-pitch underline">← Back to the feed</Link>
       </p>
     </article>
   );

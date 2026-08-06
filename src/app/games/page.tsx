@@ -90,7 +90,7 @@ export default async function GamesPage() {
                           <div className="text-xs text-muted mb-1 flex items-center gap-2">
                             {comp && (
                               <Link
-                                href={`/${comp.slug}`}
+                                href={`/news/${comp.slug}`}
                                 className="font-semibold uppercase tracking-wide hover:text-pitch"
                               >
                                 {comp.shortLabel ?? comp.label}

@@ -131,7 +131,7 @@ export default async function RootLayout({
                     const t = TAGS.find((x) => x.slug === slug);
                     if (!t) return null;
                     return (
-                      <Link key={slug} href={`/${slug}`} className="hover:text-pitch">
+                      <Link key={slug} href={`/news/${slug}`} className="hover:text-pitch">
                         {t.group === "province" ? t.label : `${t.label} news`}
                       </Link>
                     );

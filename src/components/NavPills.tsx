@@ -16,6 +16,13 @@ export function NavPills({ showGames = false }: { showGames?: boolean }) {
       : "rounded-full border border-line px-3 py-1 font-medium hover:border-pitch hover:text-pitch transition-colors";
   return (
     <nav className="mt-4 flex flex-wrap gap-2 text-sm" aria-label="Leagues and competitions">
+      <Link
+        href="/news"
+        aria-current={pathname === "/news" ? "page" : undefined}
+        className={pill(pathname === "/news")}
+      >
+        News
+      </Link>
       {showGames && (
         <Link
           href="/games"
@@ -26,11 +33,11 @@ export function NavPills({ showGames = false }: { showGames?: boolean }) {
         </Link>
       )}
       {NAV_TAGS.map((t) => {
-        const active = pathname === `/${t.slug}`;
+        const active = pathname === `/news/${t.slug}`;
         return (
           <Link
             key={t.slug}
-            href={`/${t.slug}`}
+            href={`/news/${t.slug}`}
             aria-current={active ? "page" : undefined}
             className={pill(active)}
           >

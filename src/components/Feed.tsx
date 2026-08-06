@@ -101,7 +101,7 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
                   return (
                     <Link
                       key={slug}
-                      href={`/${slug}`}
+                      href={`/news/${slug}`}
                       className="text-xs text-muted rounded-full border border-line px-2 py-0.5 hover:border-pitch hover:text-pitch"
                     >
                       {def.label}

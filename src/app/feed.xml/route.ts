@@ -18,7 +18,7 @@ export async function GET() {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
 <channel>
 <title>PitchRoots — Canadian soccer, one feed</title>
-<link>${SITE}</link>
+<link>${SITE}/news</link>
 <atom:link href="${SITE}/feed.xml" rel="self" type="application/rss+xml"/>
 <description>Curated Canadian soccer headlines. Every item links to the original publisher.</description>
 <language>en-ca</language>
