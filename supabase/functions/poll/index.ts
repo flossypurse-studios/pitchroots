@@ -671,8 +671,11 @@ const TEAM_COMPETITION: [RegExp, string][] = [
   [/montreal roses|roses de montr[eé]al/i, "nsl"],
   [/ottawa rapid/i, "nsl"],
   [/vancouver rise/i, "nsl"],
-  [/canad(a|ian).*women.*national|canwnt/i, "canwnt"],
-  [/canad(a|ian).*men.*national|canmnt/i, "canmnt"],
+  // The box office names national-team games "Canada WNT v Denmark" / "Canada
+  // MNT v Chile" — the spelled-out patterns are kept as a fallback. WNT must
+  // stay ahead of MNT: "women" contains "men", so order is what disambiguates.
+  [/canada wnt|canwnt|canad(a|ian).*women.*national/i, "canwnt"],
+  [/canada mnt|canmnt|canad(a|ian).*men.*national/i, "canmnt"],
 ];
 
 // Slim, JSON-serializable shape — the raw provider event is far too large to
@@ -715,13 +718,22 @@ function mapEvent(ev: any): GameRow | null {
     .filter(Boolean);
   // Provider convention: attractions[0] is the home side. Fall back to splitting
   // the event title, whose "Home vs. Away" ordering follows the same convention.
-  const vsSplit = name.split(/\s+(?:vs\.?|v\.)\s+/i);
+  // Separators observed in real listings: "vs.", "vs", "v.", and bare "v"
+  // ("Canada MNT v Chile") — the whitespace on both sides keeps a bare v from
+  // matching inside a word.
+  const vsSplit = name.split(/\s+(?:vs\.?|v\.?)\s+/i);
   const homeTeam = attractions[0] ?? (vsSplit.length === 2 ? vsSplit[0].trim() : null);
   const awayTeam = attractions[1] ?? (vsSplit.length === 2 ? vsSplit[1].trim() : null);
   const venue = ev?._embedded?.venues?.[0];
+  // A "Canadian Championship:" title prefix beats the club map — a CPL club
+  // hosting a League1 side in the cup is a cup game, not a league fixture, and
+  // the slug already exists as a news tag so the pill links to the right hub.
+  const competition = /canadian championship/i.test(name)
+    ? "canadian-championship"
+    : mapCompetition([...attractions, name]);
   return {
     providerEventId: String(ev.id),
-    competition: mapCompetition([...attractions, name]),
+    competition,
     name,
     homeTeam,
     awayTeam,

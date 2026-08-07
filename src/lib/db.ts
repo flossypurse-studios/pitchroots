@@ -47,7 +47,7 @@ export type Game = {
 // The competitions the calendar renders. Everything else in `games` (friendlies
 // we can't map, reserve sides) is stored but stays off the page until the
 // mapping in the worker deliberately widens.
-const GAME_COMPETITIONS = ["mls", "canpl", "nsl", "canmnt", "canwnt"];
+const GAME_COMPETITIONS = ["mls", "canpl", "nsl", "canmnt", "canwnt", "canadian-championship"];
 
 export async function upcomingGames(limit = 200): Promise<Game[]> {
   const q = sql();
