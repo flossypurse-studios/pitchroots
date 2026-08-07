@@ -49,8 +49,11 @@ export type Game = {
 // mapping in the worker deliberately widens.
 const GAME_COMPETITIONS = ["mls", "canpl", "nsl", "canmnt", "canwnt", "canadian-championship"];
 
-export async function upcomingGames(limit = 200): Promise<Game[]> {
+export async function upcomingGames(
+  opts: { competition?: string; limit?: number } = {},
+): Promise<Game[]> {
   const q = sql();
+  const limit = opts.limit ?? 200;
   // Kickoff minus 4h keeps today's game on the page until it's over; canceled
   // and postponed events drop out (a postponed game has no trustworthy date).
   const rows = await q`
@@ -59,10 +62,27 @@ export async function upcomingGames(limit = 200): Promise<Game[]> {
     from games
     where kickoff_at >= now() - interval '4 hours'
       and status not in ('canceled', 'cancelled', 'postponed')
-      and competition = any(${GAME_COMPETITIONS})
+      and competition = any(${opts.competition ? [opts.competition] : GAME_COMPETITIONS})
     order by kickoff_at asc
     limit ${limit}`;
   return rows as unknown as Game[];
+}
+
+// The competitions that currently have upcoming games — drives which game-tag
+// pills, footer links, and sitemap entries exist, so no surface ever links to
+// an empty competition page. Never throws (used in the layout).
+export async function gameCompetitionsPresent(): Promise<string[]> {
+  try {
+    const q = sql();
+    const rows = (await q`
+      select distinct competition from games
+      where kickoff_at >= now()
+        and status not in ('canceled', 'cancelled', 'postponed')
+        and competition = any(${GAME_COMPETITIONS})`) as { competition: string }[];
+    return rows.map((r) => r.competition);
+  } catch {
+    return [];
+  }
 }
 
 // Gates the nav pill, footer link, and sitemap entry: the calendar surfaces

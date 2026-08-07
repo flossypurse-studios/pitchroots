@@ -49,7 +49,7 @@ const previewDateFmt = new Intl.DateTimeFormat("en-CA", {
 export default async function HomePage() {
   const [items, games] = await Promise.all([
     latestItems({ limit: 3 }),
-    (async () => ((await hasUpcomingGames()) ? upcomingGames(3) : []))(),
+    (async () => ((await hasUpcomingGames()) ? upcomingGames({ limit: 3 }) : []))(),
   ]);
 
   return (

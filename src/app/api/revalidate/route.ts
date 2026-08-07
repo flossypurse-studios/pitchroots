@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { TAG_SLUGS } from "@/lib/tags";
+import { GAME_TAG_SLUGS, TAG_SLUGS } from "@/lib/tags";
 
 // On-demand revalidation, called by the durable ingestion worker after a run
 // publishes new items (see supabase/functions/poll — triggerRevalidate). The
@@ -20,5 +20,9 @@ export async function POST(request: Request) {
   revalidatePath("/news");
   revalidatePath("/games");
   for (const slug of TAG_SLUGS) revalidatePath(`/news/${slug}`);
-  return Response.json({ revalidated: true, paths: 3 + TAG_SLUGS.length });
+  for (const slug of GAME_TAG_SLUGS) revalidatePath(`/games/${slug}`);
+  return Response.json({
+    revalidated: true,
+    paths: 3 + TAG_SLUGS.length + GAME_TAG_SLUGS.length,
+  });
 }

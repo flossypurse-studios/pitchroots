@@ -35,4 +35,12 @@ export const TAGS: TagDef[] = [
 export const TAG_SLUGS = TAGS.map((t) => t.slug);
 export const tagBySlug = (slug: string) => TAGS.find((t) => t.slug === slug);
 // Nav shows the leagues/nationals; provinces are reachable via item tags + sitemap.
+// These are the NEWS tags — they render only on /news and /news/<tag>.
 export const NAV_TAGS = TAGS.filter((t) => t.group !== "province");
+
+// The GAMES tags — the competitions the calendar can hold, rendered only on
+// /games and /games/<competition>. A subset of the news vocabulary on purpose:
+// one slug means one thing everywhere, it just filters a different surface
+// under each root. Order is display order for pills and footer links.
+export const GAME_TAG_SLUGS = ["canmnt", "canwnt", "canpl", "nsl", "mls", "canadian-championship"];
+export const GAME_TAGS = GAME_TAG_SLUGS.map((s) => TAGS.find((t) => t.slug === s)!);

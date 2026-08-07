@@ -3,8 +3,8 @@ import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { NavPills } from "@/components/NavPills";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { hasUpcomingGames } from "@/lib/db";
-import { TAGS } from "@/lib/tags";
+import { gameCompetitionsPresent } from "@/lib/db";
+import { GAME_TAGS, TAGS } from "@/lib/tags";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -83,10 +83,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // The games calendar surfaces sitewide (nav pill, footer link) only once the
+  // The games calendar surfaces sitewide (nav pill, footer links) only once the
   // daily sync has actual upcoming games — an empty calendar linked from every
-  // page is worse than no calendar. Re-checked whenever a page revalidates.
-  const showGames = await hasUpcomingGames();
+  // page is worse than no calendar. Per-competition, for the same reason: only
+  // competitions with upcoming dates get links. Re-checked on every revalidate.
+  const gameCompetitions = await gameCompetitionsPresent();
+  const showGames = gameCompetitions.length > 0;
   return (
     <html
       lang="en"
@@ -117,7 +119,7 @@ export default async function RootLayout({
             <p className="mt-1 hidden text-sm text-muted sm:block">
               Canadian soccer, one feed. Every story links to its source.
             </p>
-            <NavPills showGames={showGames} />
+            <NavPills gameCompetitions={gameCompetitions} />
           </div>
         </header>
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
@@ -139,6 +141,18 @@ export default async function RootLayout({
                 </div>
               </nav>
             ))}
+            {showGames && (
+              <nav aria-label="Game tickets">
+                <span className="font-semibold">Game tickets:</span>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                  {GAME_TAGS.filter((t) => gameCompetitions.includes(t.slug)).map((t) => (
+                    <Link key={t.slug} href={`/games/${t.slug}`} className="hover:text-pitch">
+                      {`${t.shortLabel ?? t.label} games`}
+                    </Link>
+                  ))}
+                </div>
+              </nav>
+            )}
             <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 border-t border-line">
               {showGames && (
                 <Link href="/games" className="hover:text-pitch">Games &amp; tickets</Link>
