@@ -1,13 +1,20 @@
 @import "tailwindcss";
 
+/* Taiga Autumn — the Group of Seven register: birch-bark backgrounds, botanical
+   pitch green, burnt sienna as the lone supporting colour (maple BARK, not
+   maple-leaf red — flag red beside pitch green reads as Christmas, and every
+   red lane in Canadian soccer is already taken). Sienna is deliberately darker
+   than its "brand" shade so small text on the light background clears WCAG AA;
+   contrast floors: every pitch/bark pair ≥4.5:1 against both backgrounds. */
 :root {
-  --background: #f7f7f2;
-  --foreground: #171a17;
-  --muted: #5c665e;
-  --line: #dfe3da;
-  --pitch: #0e7a3c;
-  --pitch-strong: #0a5c2e;
-  --card: #ffffff;
+  --background: #f7f1e8;
+  --foreground: #191713;
+  --muted: #6a6154;
+  --line: #e5dccb;
+  --pitch: #1a4a28;
+  --pitch-strong: #123b1e;
+  --bark: #a34c1f;
+  --card: #fffbf4;
 }
 
 @theme inline {
@@ -17,6 +24,7 @@
   --color-line: var(--line);
   --color-pitch: var(--pitch);
   --color-pitch-strong: var(--pitch-strong);
+  --color-bark: var(--bark);
   --color-card: var(--card);
   --font-sans: var(--font-geist-sans);
   --font-display: var(--font-archivo);
@@ -29,24 +37,26 @@
    appear twice below — keep both blocks in lockstep. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #101410;
-    --foreground: #e9ede8;
-    --muted: #96a198;
-    --line: #232a24;
-    --pitch: #46b96e;
-    --pitch-strong: #7dd99b;
-    --card: #161b16;
+    --background: #141810;
+    --foreground: #eae9de;
+    --muted: #9aa18c;
+    --line: #262c20;
+    --pitch: #4fba74;
+    --pitch-strong: #86d9a0;
+    --bark: #d97b4a;
+    --card: #1c2117;
   }
 }
 
 :root[data-theme="dark"] {
-  --background: #101410;
-  --foreground: #e9ede8;
-  --muted: #96a198;
-  --line: #232a24;
-  --pitch: #46b96e;
-  --pitch-strong: #7dd99b;
-  --card: #161b16;
+  --background: #141810;
+  --foreground: #eae9de;
+  --muted: #9aa18c;
+  --line: #262c20;
+  --pitch: #4fba74;
+  --pitch-strong: #86d9a0;
+  --bark: #d97b4a;
+  --card: #1c2117;
 }
 
 /* The theme toggle shows the icon for the mode you'd switch TO, resolved by the

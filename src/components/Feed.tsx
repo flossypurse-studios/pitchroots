@@ -85,7 +85,7 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
                       href={o.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold underline hover:text-pitch transition-colors"
+                      className="font-semibold text-bark underline hover:text-pitch transition-colors"
                     >
                       {o.name}
                     </a>

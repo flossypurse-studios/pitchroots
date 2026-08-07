@@ -97,7 +97,7 @@ export function GamesCalendar({ games }: { games: Game[] }) {
               <h3 className="font-display font-bold text-sm uppercase tracking-widest text-pitch mb-3">
                 {day}
                 {isToday(dayGames[0]) && (
-                  <span className="ml-2 rounded-full bg-pitch px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-background align-middle">
+                  <span className="ml-2 rounded-full bg-bark px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-background align-middle">
                     Today
                   </span>
                 )}

@@ -15,7 +15,7 @@ export default function OpengraphImage() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0a5c2e",
+          background: "#123b1e",
           backgroundImage:
             "linear-gradient(90deg, rgba(255,255,255,0.06) 0 50%, rgba(255,255,255,0) 50% 100%)",
           backgroundSize: "200px 100%",
@@ -30,7 +30,7 @@ export default function OpengraphImage() {
             border: "6px solid rgba(255,255,255,0.9)",
             borderRadius: 24,
             padding: "40px 72px",
-            background: "rgba(10,92,46,0.85)",
+            background: "rgba(18,59,30,0.85)",
           }}
         >
           <div style={{ fontSize: 110, fontWeight: 900, letterSpacing: -3 }}>
@@ -41,13 +41,13 @@ export default function OpengraphImage() {
               fontSize: 110,
               fontWeight: 900,
               letterSpacing: -3,
-              color: "#8fe3ae",
+              color: "#9fe0b0",
             }}
           >
             Roots
           </div>
         </div>
-        <div style={{ marginTop: 36, fontSize: 40, color: "#d9efe1" }}>
+        <div style={{ marginTop: 36, fontSize: 40, color: "#e6eedd" }}>
           Canadian soccer news, one feed
         </div>
       </div>

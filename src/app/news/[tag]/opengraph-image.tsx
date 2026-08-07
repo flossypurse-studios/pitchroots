@@ -30,7 +30,7 @@ export default async function Image({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0a5c2e",
+          background: "#123b1e",
           backgroundImage:
             "linear-gradient(90deg, rgba(255,255,255,0.06) 0 50%, rgba(255,255,255,0) 50% 100%)",
           backgroundSize: "200px 100%",
@@ -45,17 +45,17 @@ export default async function Image({
             border: "6px solid rgba(255,255,255,0.9)",
             borderRadius: 24,
             padding: "28px 64px",
-            background: "rgba(10,92,46,0.85)",
+            background: "rgba(18,59,30,0.85)",
           }}
         >
           <div style={{ fontSize: 84, fontWeight: 900, letterSpacing: -3 }}>
             {def?.label ?? "PitchRoots"}
           </div>
         </div>
-        <div style={{ marginTop: 32, fontSize: 36, color: "#d9efe1" }}>
+        <div style={{ marginTop: 32, fontSize: 36, color: "#e6eedd" }}>
           {def?.blurb ?? "Canadian soccer news, one feed"}
         </div>
-        <div style={{ marginTop: 14, fontSize: 26, color: "#8fe3ae" }}>
+        <div style={{ marginTop: 14, fontSize: 26, color: "#9fe0b0" }}>
           PitchRoots — Canadian soccer news, one feed
         </div>
       </div>
