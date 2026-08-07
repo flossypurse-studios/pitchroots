@@ -722,8 +722,20 @@ function mapEvent(ev: any): GameRow | null {
   // ("Canada MNT v Chile") — the whitespace on both sides keeps a bare v from
   // matching inside a word.
   const vsSplit = name.split(/\s+(?:vs\.?|v\.?)\s+/i);
-  const homeTeam = attractions[0] ?? (vsSplit.length === 2 ? vsSplit[0].trim() : null);
-  const awayTeam = attractions[1] ?? (vsSplit.length === 2 ? vsSplit[1].trim() : null);
+  const fromTitle = vsSplit.length === 2;
+  // "Canadian Soccer Association" is the box office's attraction name for both
+  // national teams. Once it's in the list the index convention is useless for
+  // naming (and filtering it out would slide the opponent into the home slot),
+  // so a national-team listing takes both sides from the title — which carries
+  // the names a fan recognises ("Canada WNT v Denmark"). The competition map
+  // below still sees every attraction name, so classification is unaffected.
+  const nationalTeam = attractions.some((n) => /canadian soccer association/i.test(n));
+  const homeTeam = nationalTeam && fromTitle
+    ? vsSplit[0].trim()
+    : attractions[0] ?? (fromTitle ? vsSplit[0].trim() : null);
+  const awayTeam = nationalTeam && fromTitle
+    ? vsSplit[1].trim()
+    : attractions[1] ?? (fromTitle ? vsSplit[1].trim() : null);
   const venue = ev?._embedded?.venues?.[0];
   // A "Canadian Championship:" title prefix beats the club map — a CPL club
   // hosting a League1 side in the cup is a cup game, not a league fixture, and

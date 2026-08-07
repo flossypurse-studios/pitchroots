@@ -71,7 +71,7 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
             <a href={item.url} target="_blank" rel="noopener noreferrer">
               <h2 className="font-display font-bold text-xl leading-snug hover:text-pitch transition-colors">
                 {item.title}
-                <span className="text-pitch"> ↗</span>
+                <span className="text-pitch" aria-hidden> ↗</span>
               </h2>
             </a>
             <p className="mt-1 text-sm leading-relaxed">{item.summary}</p>

@@ -54,7 +54,9 @@ export default async function CompetitionGamesPage({
     <>
       <div className="mb-6">
         <h1 className="font-display font-black text-2xl">{def.label} games</h1>
-        <p className="text-base text-muted mt-1">{def.blurb}</p>
+        <p className="text-base text-muted mt-1">
+          {def.blurb} — upcoming home dates, kickoff times local to the venue.
+        </p>
       </div>
       <GamesCalendar games={games} />
       <p className="mt-8 pt-4 border-t border-line text-xs text-muted">
