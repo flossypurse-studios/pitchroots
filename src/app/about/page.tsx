@@ -1,9 +1,22 @@
 import type { Metadata } from "next";
+import { pageOpenGraph } from "@/lib/seo";
+
+const title = "About";
+const description = "What PitchRoots is and how the feed works.";
 
 export const metadata: Metadata = {
-  title: "About",
-  description: "What PitchRoots is and how the feed works.",
+  title,
+  description,
   alternates: { canonical: "/about" },
+  // Without this, the page inherits the root layout's OpenGraph object
+  // unchanged (this segment declares no `openGraph` key of its own) — a share
+  // of /about would carry the homepage's title/description, not its own.
+  openGraph: pageOpenGraph({
+    title: "About — PitchRoots",
+    description,
+    path: "/about",
+    image: "/opengraph-image",
+  }),
 };
 
 export default function AboutPage() {

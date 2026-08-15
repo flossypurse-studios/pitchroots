@@ -1,11 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { pageOpenGraph } from "@/lib/seo";
+
+const description =
+  "PitchRoots is a live example of durable execution: scheduled pipelines that checkpoint every step to Postgres and resume after any crash. Here's how it's built.";
 
 export const metadata: Metadata = {
   title: "How it's built",
-  description:
-    "PitchRoots is a live example of durable execution: scheduled pipelines that checkpoint every step to Postgres and resume after any crash. Here's how it's built.",
+  description,
   alternates: { canonical: "/how-it-works" },
+  // See src/app/about/page.tsx: without a page-level `openGraph`, this route
+  // would silently inherit the root layout's title/description on shares.
+  openGraph: pageOpenGraph({
+    title: "How it's built — PitchRoots",
+    description,
+    path: "/how-it-works",
+    image: "/opengraph-image",
+  }),
 };
 
 const DIAGRAM = `  WRITE LOOP  (durable, in the background)   READ LOOP  (every visit)
