@@ -163,6 +163,30 @@ export default async function RootLayout({
               <a href="mailto:hello@pitchroots.ca" className="hover:text-pitch">hello@pitchroots.ca</a>
               <span>Headlines and summaries link out to the original publishers.</span>
             </div>
+            <div className="pt-2 border-t border-line">
+              <a
+                href="https://flossypurse.studio"
+                className="inline-flex items-center gap-2 opacity-80 hover:opacity-100"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 128 128"
+                  width={16}
+                  height={16}
+                  role="img"
+                  aria-label="FlossyPurse Studios"
+                >
+                  <title>FlossyPurse Studios</title>
+                  <path
+                    fill="currentColor"
+                    fillRule="evenodd"
+                    transform="translate(-5 -1) rotate(-34 65 64)"
+                    d="M112 64 C100 38 66 36 44 55 L23 37 L17 44 L36 64 L17 84 L23 91 L44 73 C66 94 100 92 112 64 Z M95 56 A5 5 0 1 1 85 56 A5 5 0 1 1 95 56 Z"
+                  />
+                </svg>
+                <span>A FlossyPurse Studios project</span>
+              </a>
+            </div>
           </div>
         </footer>
       </body>
