@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { GamesCalendar } from "@/components/GamesCalendar";
 import { upcomingGames } from "@/lib/db";
+import { breadcrumbJsonLd, pageOpenGraph, sportsEventsJsonLd } from "@/lib/seo";
 import { GAME_TAGS, GAME_TAG_SLUGS, tagBySlug } from "@/lib/tags";
 
 export const revalidate = 900;
@@ -33,11 +34,14 @@ export async function generateMetadata({
     description,
     alternates: { canonical: `/games/${competition}` },
     ...(isEmpty ? { robots: { index: false, follow: true } } : {}),
-    openGraph: {
+    // No opengraph-image.tsx for this segment — needs an explicit `image` or
+    // the whole card gets replaced with nothing. See src/lib/seo.ts.
+    openGraph: pageOpenGraph({
       title: `${def.label} games — PitchRoots`,
       description,
-      url: `/games/${competition}`,
-    },
+      path: `/games/${competition}`,
+      image: "/opengraph-image",
+    }),
   };
 }
 
@@ -50,8 +54,25 @@ export default async function CompetitionGamesPage({
   const def = GAME_TAGS.find((t) => t.slug === competition);
   if (!def) notFound();
   const games = await competitionGames(competition);
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "PitchRoots", path: "/" },
+    { name: "Games", path: "/games" },
+    { name: `${def.label} games`, path: `/games/${competition}` },
+  ]);
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs).replace(/</g, "\\u003c") }}
+      />
+      {games.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(sportsEventsJsonLd(games)).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
       <div className="mb-6">
         <h1 className="font-display font-black text-2xl">{def.label} games</h1>
         <p className="text-base text-muted mt-1">

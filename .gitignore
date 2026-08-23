@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Opting in: .env.example holds no secrets, and it is where the build-time-only
+# nature of NEXT_PUBLIC_GA_MEASUREMENT_ID is written down. Ignored, that warning
+# reaches nobody but the machine that wrote it.
+!.env.example
 
 # vercel
 .vercel

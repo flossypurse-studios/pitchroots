@@ -231,7 +231,7 @@ create index if not exists items_match_trgm_idx
 create table if not exists audit_findings (
   id bigserial primary key,
   found_at timestamptz not null default now(),
-  kind text not null,          -- 'dead_link' | 'quiet_source' | 'empty_feed' | 'off_topic'
+  kind text not null,          -- 'dead_link' | 'quiet_source' | 'empty_feed' | 'off_topic' | 'social_stuck'
   subject_id bigint,           -- item id (dead_link, off_topic) or source id (the rest)
   detail text not null,
   resolved_at timestamptz
@@ -290,3 +290,40 @@ create table if not exists games_run_log (
   by_competition jsonb
 );
 create index if not exists games_run_log_ran_at_idx on games_run_log (ran_at desc);
+
+-- 2026-08-22 ── the social mirror (SPEC §2: an approved surface; §8.4: the design).
+--
+-- One row per item, written by the `postSocial` step at the end of every poll run.
+-- The row is a record of *intent*, not of outcome: it is written `pending` BEFORE
+-- the API call, so a crash between the two leaves evidence instead of a silent gap
+-- and the next execution can go and look at what actually happened. Everywhere else
+-- in this pipeline at-least-once side effects are harmless — a replayed insert hits
+-- `on conflict do nothing`. Here a replayed side effect is a duplicate post on a
+-- public timeline that cannot be recalled, which is why this table exists at all.
+create table if not exists social_posts (
+  item_id     bigint primary key references items(id) on delete cascade,
+  -- pending          claimed; outcome unknown until the row says otherwise
+  -- posted           live on the timeline, uri/cid recorded
+  -- failed           retries exhausted; parked for the daily audit, never auto-retried
+  -- skipped_backfill predates the mirror, or was never eligible for it
+  status      text not null default 'pending'
+              check (status in ('pending', 'posted', 'failed', 'skipped_backfill')),
+  post_uri    text,
+  post_cid    text,
+  attempts    int not null default 0,
+  last_error  text,
+  created_at  timestamptz not null default now(),
+  posted_at   timestamptz
+);
+-- Drives the audit sweep for rows stuck pending and rows parked failed.
+create index if not exists social_posts_status_idx on social_posts (status, created_at);
+
+-- No backfill, ever (SPEC §8.4). Every item that exists before the mirror goes live
+-- is claimed here as `skipped_backfill`, so a cold start cannot dump the archive onto
+-- an empty timeline. Idempotent, and deliberately safe to re-run: applying it again
+-- immediately before the first live poll closes the window between this file being
+-- applied and the function being deployed, during which an ordinary hourly run would
+-- otherwise publish items that no row yet covers.
+insert into social_posts (item_id, status)
+  select id, 'skipped_backfill' from items
+on conflict (item_id) do nothing;
