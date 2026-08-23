@@ -429,6 +429,19 @@ resonate.register("poll", async function poll(ctx: Context) {
   // hours after publication waits for the ISR timer.
   if (published + attached > 0) await ctx.run(() => triggerRevalidate());
 
+  // The mirror runs LAST — after persistence, after clustering, after the revalidate
+  // ping — and never inside ingestSource, because until every source has settled a
+  // story can still turn out to be one another outlet already ran and be merged away.
+  // A card that loses its own page is a no-op; a post that shouldn't exist is public.
+  // Its own child invocation, and its failure is swallowed here: posting can never
+  // fail a run or block publication.
+  let social: unknown;
+  try {
+    social = await ctx.rpc("postSocial");
+  } catch (err) {
+    social = { error: String(err) };
+  }
+
   const summary = {
     sources: results.length,
     published,
@@ -436,6 +449,7 @@ resonate.register("poll", async function poll(ctx: Context) {
     classified: results.reduce((n, r) => n + r.classified, 0),
     deadLinks: results.reduce((n, r) => n + r.deadLinks, 0),
     dropped: results.reduce((n, r) => n + r.dropped, 0),
+    social,
     perSource: results,
   };
 
@@ -570,6 +584,278 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
   return stats;
 });
 
+// ── the social mirror (SPEC §8.4) ────────────────────────────────────────────
+//
+// One Bluesky account mirroring each published item exactly as the card presents
+// it: headline, our own-words summary, the source credited, the link out. It is a
+// mirror, not a channel — this code writes and never reads a reply, a mention, a
+// DM or a timeline. The single exception is that it reads *our own repo* to find
+// out whether a post it may already have sent is there; that is not a read path,
+// it is the only way to make a publicly visible side effect idempotent.
+const BSKY_PDS = "https://bsky.social";
+// The post limit is 300 GRAPHEMES — not characters, not bytes. The external embed
+// card carries the link and does not count toward it.
+const BSKY_MAX_GRAPHEMES = 300;
+// Eligibility window, measured on ingested_at (when *we* published, not when the
+// outlet did). The migration already claims every pre-existing item as
+// skipped_backfill; this window is the second lock on the same door — whatever a
+// gap in that claim or a multi-day outage leaves unclaimed, the archive can never
+// arrive on the timeline in a burst.
+const SOCIAL_WINDOW_HOURS = 6;
+// Per-run ceiling. An ordinary run publishes a handful, but the first run after a
+// new source is added can publish dozens, and dozens of posts inside one minute is
+// a timeline dump rather than a feed. The overflow is reported, not silently lost:
+// nothing claims those items, so the next run picks them up while they're in window.
+const MAX_POSTS_PER_RUN = 12;
+
+type SocialItem = {
+  id: number;
+  source_id: number;
+  source_name: string;
+  title: string;
+  summary: string;
+  snippet: string | null;
+  url: string;
+  tags: string[];
+};
+
+type Citation = { name: string; url: string };
+type PostRef = { uri: string; cid: string };
+type BskySession = { did: string; jwt: string };
+
+// Graphemes, because that is what the limit counts. For "👨‍👩‍👧" the three numbers
+// that matter — 5 UTF-16 units, 18 bytes, 1 grapheme — are all different, and using
+// the wrong one either rejects a legal post or gets a legal-looking one rejected.
+const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
+function graphemeLen(s: string): number {
+  let n = 0;
+  for (const _ of GRAPHEMES.segment(s)) n++;
+  return n;
+}
+
+// Facet offsets are UTF-8 BYTE offsets into the post text, not string indices. Every
+// em-dash in our summaries is 3 bytes and 1 character, so a facet computed from
+// indexOf lands short and silently mislinks — the post publishes, the hashtag just
+// points at the wrong run of text.
+const UTF8 = new TextEncoder();
+function byteLen(s: string): number {
+  return UTF8.encode(s).length;
+}
+
+// Split a 1–2 sentence summary at its first sentence boundary. Deliberately blunt:
+// the minimum length keeps "St. John's" from reading as a whole sentence, and when
+// nothing matches the caller gets the summary back unchanged, which is the safe
+// answer for a summary that was one sentence all along.
+function firstSentence(s: string): string {
+  const m = s.match(/^.{40,}?[.!?](?=\s)/s);
+  return m ? m[0] : s;
+}
+
+// The card, transposed. Priority order comes from SPEC §8.4: over budget, drop whole
+// units — the hashtags, then the summary's second sentence, then the summary — never
+// characters. No mid-word truncation and no ellipsis, so a headline that cannot fit
+// on its own returns null and the caller parks it rather than publishing a stub.
+function composePost(item: SocialItem): { text: string; facets: unknown[] } | null {
+  // Ordered by the canonical vocabulary, not by however the classifier listed them:
+  // leagues and national teams sit ahead of provinces in TAG_SLUGS, so "up to two"
+  // keeps the two that identify the story rather than two provinces.
+  const tags = TAG_SLUGS.filter((t) => item.tags.includes(t)).slice(0, 2);
+  const title = item.title.trim();
+  const summary = item.summary.trim();
+  const via = `via ${item.source_name}`;
+
+  const ladder = [
+    { summary, tags },
+    { summary, tags: [] as string[] },
+    { summary: firstSentence(summary), tags: [] as string[] },
+    { summary: "", tags: [] as string[] },
+  ];
+
+  for (const rung of ladder) {
+    const tail = rung.tags.length
+      ? `${via} ${rung.tags.map((t) => `#${t}`).join(" ")}`
+      : via;
+    const text = [title, rung.summary, tail].filter(Boolean).join("\n\n");
+    if (graphemeLen(text) > BSKY_MAX_GRAPHEMES) continue;
+
+    const facets = rung.tags.map((tag) => {
+      // The hashtags are the last thing in the text, so search from the end — a
+      // headline that happens to contain "#canpl" can't steal the offset.
+      const at = text.lastIndexOf(`#${tag}`);
+      const byteStart = byteLen(text.slice(0, at));
+      return {
+        index: { byteStart, byteEnd: byteStart + byteLen(`#${tag}`) },
+        features: [{ $type: "app.bsky.richtext.facet#tag", tag }],
+      };
+    });
+    return { text, facets };
+  }
+  return null;
+}
+
+// The card's "Also covered by" line, mirrored as one self-threaded follow-up. The
+// outlet name is the link: a bare URL would eat the grapheme budget and reads worse
+// than the name it points at. Outlets that don't fit are dropped from the list
+// rather than spilling into a second reply — one continuation of our own record,
+// never a thread that grows.
+function composeCitations(also: Citation[]): { text: string; facets: unknown[] } | null {
+  const facets: unknown[] = [];
+  let text = "Also covered by ";
+  let kept = 0;
+  for (const c of also) {
+    const sep = kept === 0 ? "" : ", ";
+    const next = `${text}${sep}${c.name}`;
+    if (graphemeLen(`${next}.`) > BSKY_MAX_GRAPHEMES) break;
+    const byteStart = byteLen(`${text}${sep}`);
+    facets.push({
+      index: { byteStart, byteEnd: byteStart + byteLen(c.name) },
+      features: [{ $type: "app.bsky.richtext.facet#link", uri: c.url }],
+    });
+    text = next;
+    kept++;
+  }
+  return kept === 0 ? null : { text: `${text}.`, facets };
+}
+
+// postSocial() — the mirror step. Invoked by poll() as its own child run, and by
+// nothing else. Fans out over the items this run first published, oldest first, so
+// the timeline reads in the same order as the feed.
+resonate.register("postSocial", async function postSocial(ctx: Context) {
+  // Kill switch, same posture that let the games calendar ship before its API key
+  // existed: with the flag off or the credentials absent the step resolves skipped
+  // and the run is otherwise completely normal.
+  if ((Deno.env.get("SOCIAL_MIRROR") ?? "on").toLowerCase() === "off") {
+    return { skipped: "SOCIAL_MIRROR=off" };
+  }
+  // Formatting can be inspected without publishing: composes every record and logs
+  // it, touching neither the API nor social_posts. Hand-posting to check a format is
+  // banned by §2, and the first post on that timeline should be the pipeline's.
+  const dryRun = Deno.env.get("SOCIAL_MIRROR_DRY_RUN") === "1";
+
+  const queue = (await ctx.run(() => getSocialQueue())) as SocialItem[];
+  if (queue.length === 0) return { eligible: 0, posted: 0 };
+
+  const eligible = queue.slice(0, MAX_POSTS_PER_RUN);
+  const deferred = queue.length - eligible.length;
+
+  // One session per run, reused across every post. createSession is rate-limited far
+  // more tightly than posting is, so a session per post would throttle long before
+  // the posts did. Deliberately NOT a ctx.run checkpoint, for two reasons that both
+  // rule it out on their own: the access token is a credential and a checkpoint
+  // would journal it into Postgres, and it expires in about two hours while a
+  // durable run can resume a day later — a replayed checkpoint would hand every post
+  // a dead token. Re-authenticating on replay is correct and costs one call.
+  let session: BskySession | null = null;
+  if (!dryRun) {
+    try {
+      session = await bskyLogin();
+    } catch (err) {
+      // Nothing has been claimed yet, so no row is burned by an auth outage; the
+      // next run tries again with the same queue.
+      return { skipped: `bluesky auth failed: ${String(err)}`, eligible: eligible.length };
+    }
+    if (session === null) return { skipped: "no Bluesky credentials", eligible: eligible.length };
+  }
+
+  // A checkpointed run clock: every post's createdAt derives from it, so a replay
+  // stamps the same values. The per-item offset keeps the timeline's own ordering
+  // unambiguous — posting oldest-first is the whole point, and identical timestamps
+  // would leave the order up to the client.
+  const now = (await ctx.run(() => Date.now())) as number;
+
+  let posted = 0, adopted = 0, failed = 0, threaded = 0;
+
+  for (let i = 0; i < eligible.length; i++) {
+    const item = eligible[i];
+    const composed = composePost(item);
+    const citations = (await ctx.run(() => getCitations(item.id, item.source_id))) as Citation[];
+    const thread = composeCitations(citations);
+
+    const record = composed && {
+      $type: "app.bsky.feed.post",
+      text: composed.text,
+      facets: composed.facets,
+      langs: ["en"],
+      createdAt: new Date(now + i * 1000).toISOString(),
+      embed: {
+        $type: "app.bsky.embed.external",
+        external: {
+          uri: item.url,
+          title: item.title,
+          // The source's own description, as any link preview shows it. Capped
+          // because clients truncate anyway, and never an image: §3 forbids
+          // republishing them, and a thumb blob is exactly that.
+          description: embedDescription(item),
+        },
+      },
+    };
+
+    if (dryRun) {
+      console.log(JSON.stringify({ dryRun: item.id, record, thread }));
+      continue;
+    }
+
+    if (record === null) {
+      // 300 graphemes of headline with nowhere left to cut. Parking it is the honest
+      // outcome: §8.4 forbids mid-word truncation, and the audit will surface it.
+      await ctx.run(() => recordSocialFailure(item.id, "headline alone exceeds 300 graphemes", true));
+      failed++;
+      continue;
+    }
+
+    // Claim before the call, never after. `getSocialQueue` already excluded anything
+    // with a row, so a conflict here means a concurrent or replayed execution got
+    // there first and its verdict wins.
+    const claim = (await ctx.run(() => claimSocialPost(item.id))) as string;
+    if (claim !== "claimed" && claim !== "pending") continue;
+
+    let ref: (PostRef & { existed: boolean }) | null = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        ref = (await ctx.run(() => reconcileOrPost(session!, item.url, record))) as
+          PostRef & { existed: boolean };
+        break;
+      } catch (err) {
+        // Two durable retries, then park. ctx.sleep suspends the run at zero compute
+        // and is resolved by the timer tick, the same shape as the feed-fetch retry.
+        await ctx.run(() => recordSocialFailure(item.id, String(err), attempt === 3));
+        if (attempt < 3) await ctx.sleep(attempt * 30_000);
+      }
+    }
+    if (ref === null) {
+      failed++;
+      continue;
+    }
+
+    if (ref.existed) adopted++;
+    else posted++;
+    await ctx.run(() => markSocialPosted(item.id, ref!.uri, ref!.cid));
+
+    if (thread !== null) {
+      try {
+        const made = (await ctx.run(() =>
+          reconcileOrThread(session!, ref!, thread, new Date(now + i * 1000 + 500).toISOString())
+        )) as boolean;
+        if (made) threaded++;
+      } catch {
+        // A missing citation reply is a cosmetic loss on a post that is already
+        // correct and already credits its own source. It is not worth a retry, and
+        // certainly not worth failing a row that is genuinely posted.
+      }
+    }
+  }
+
+  return {
+    eligible: eligible.length,
+    posted,
+    adopted,
+    failed,
+    threaded,
+    deferred,
+    dryRun: dryRun || undefined,
+  };
+});
+
 // recheckDisabledSources() — the auto-heal half of the self-healing pair. A source
 // that fails enough whole polls in a row gets parked (active=false) by markSourceFail;
 // this durable run — invoked by its own daily pg_cron job — re-fetches each parked
@@ -629,8 +915,9 @@ resonate.register("audit", async function audit(ctx: Context) {
   const quiet = (await ctx.run(() => flagQuietSources())) as number;
   const empty = (await ctx.run(() => flagEmptyFeeds())) as number;
   const offTopic = (await ctx.run(() => flagOffTopicItems())) as number;
+  const social = (await ctx.run(() => flagStuckSocialPosts())) as number;
 
-  return { linksChecked: slice.length, dead, quiet, empty, offTopic };
+  return { linksChecked: slice.length, dead, quiet, empty, offTopic, social };
 });
 
 // pollGames() — the daily games-calendar sync, invoked by its own pg_cron job.
@@ -1139,6 +1426,214 @@ async function logGamesRun(
     insert into games_run_log (origin_id, fetched, mapped, upserted, by_competition)
     values (${originId}, ${s.fetched}, ${s.mapped}, ${s.upserted}, ${sql.json(s.byCompetition)})
     on conflict (origin_id) do nothing`;
+  return null;
+}
+
+// A mirror row that never settled. `failed` means the retry budget was spent and
+// nothing will pick it up again; `pending` past the window means an execution
+// claimed a post and never came back to say what happened, which is the one state
+// where a post might exist that nothing in the database knows about. Both are
+// reports, not repairs — re-posting on a hunch is how a timeline gets a duplicate.
+const AUDIT_SOCIAL_STUCK_HOURS = 2;
+
+async function flagStuckSocialPosts(): Promise<number> {
+  const rows = await sql`
+    insert into audit_findings (kind, subject_id, detail)
+    select 'social_stuck', p.item_id,
+           p.status || ' after ' || p.attempts || ' attempt(s): ' ||
+           coalesce(p.last_error, 'no error recorded')
+    from social_posts p
+    where (p.status = 'failed'
+           or (p.status = 'pending'
+               and p.created_at < now() - ${`${AUDIT_SOCIAL_STUCK_HOURS} hours`}::interval))
+      and not exists (
+        select 1 from audit_findings f
+        where f.kind = 'social_stuck' and f.subject_id = p.item_id and f.resolved_at is null)
+    returning id`;
+  return rows.length;
+}
+
+// ── the social mirror: Bluesky calls and their DB side ───────────────────────
+
+// An app password, never the account password — revocable from the account without
+// touching anything else. Returns null (rather than throwing) when the credentials
+// simply aren't set, which is the kill switch, not a failure.
+async function bskyLogin(): Promise<BskySession | null> {
+  const identifier = Deno.env.get("BLUESKY_HANDLE");
+  const password = Deno.env.get("BLUESKY_APP_PASSWORD");
+  if (!identifier || !password) return null;
+  const res = await fetch(`${BSKY_PDS}/xrpc/com.atproto.server.createSession`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ identifier, password }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`createSession HTTP ${res.status}: ${body?.message ?? ""}`);
+  return { did: body.did, jwt: body.accessJwt };
+}
+
+// The one read this account performs, and it reads only its own repo: has the post
+// we are about to send already been sent? Matching is on the embed's link, which is
+// unique per item and is the field we control.
+async function bskyFindPost(
+  session: BskySession,
+  match: (value: Record<string, any>) => boolean,
+): Promise<PostRef | null> {
+  const params = new URLSearchParams({
+    repo: session.did,
+    collection: "app.bsky.feed.post",
+    limit: "100",
+  });
+  const res = await fetch(`${BSKY_PDS}/xrpc/com.atproto.repo.listRecords?${params}`, {
+    headers: { authorization: `Bearer ${session.jwt}` },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`listRecords HTTP ${res.status}: ${body?.message ?? ""}`);
+  for (const rec of body?.records ?? []) {
+    if (match(rec?.value ?? {})) return { uri: rec.uri, cid: rec.cid };
+  }
+  return null;
+}
+
+async function bskyCreatePost(session: BskySession, record: unknown): Promise<PostRef> {
+  const res = await fetch(`${BSKY_PDS}/xrpc/com.atproto.repo.createRecord`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${session.jwt}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      repo: session.did,
+      collection: "app.bsky.feed.post",
+      record,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      `createRecord HTTP ${res.status}: ${body?.error ?? ""} ${body?.message ?? ""}`.trim(),
+    );
+  }
+  return { uri: body.uri, cid: body.cid };
+}
+
+// Look, then write — inside ONE checkpoint, which is the entire point of the shape.
+// The gap at-least-once leaves open is a side effect that completed and a journal
+// write that didn't; a replay re-executes this step, so the look re-executes with it
+// and finds the post the lost execution made instead of sending a second one. A
+// reconcile that lived in its own checkpoint would be replayed from the journal —
+// stale, and worthless exactly when it is needed.
+async function reconcileOrPost(
+  session: BskySession,
+  linkUri: string,
+  record: unknown,
+): Promise<PostRef & { existed: boolean }> {
+  const existing = await bskyFindPost(session, (v) => v?.embed?.external?.uri === linkUri);
+  if (existing) return { ...existing, existed: true };
+  return { ...(await bskyCreatePost(session, record)), existed: false };
+}
+
+// Same shape for the citation reply, matched on its parent instead of its link. A
+// self-thread needs BOTH root and parent, and here they are the same post: this is a
+// continuation of our own record, never a reply to a person.
+async function reconcileOrThread(
+  session: BskySession,
+  parent: PostRef,
+  thread: { text: string; facets: unknown[] },
+  createdAt: string,
+): Promise<boolean> {
+  const existing = await bskyFindPost(session, (v) => v?.reply?.parent?.uri === parent.uri);
+  if (existing) return false;
+  await bskyCreatePost(session, {
+    $type: "app.bsky.feed.post",
+    text: thread.text,
+    facets: thread.facets,
+    langs: ["en"],
+    createdAt,
+    reply: { root: parent, parent },
+  });
+  return true;
+}
+
+// The link-preview description. The source's own words from its own feed, which is
+// exactly what a preview card shows anywhere else; capped because every client
+// truncates it, and falling back to the outlet's name rather than to nothing.
+const EMBED_DESCRIPTION_CHARS = 280;
+function embedDescription(item: SocialItem): string {
+  const s = (item.snippet ?? "").trim();
+  if (!s) return item.source_name;
+  if (s.length <= EMBED_DESCRIPTION_CHARS) return s;
+  const cut = s.slice(0, EMBED_DESCRIPTION_CHARS);
+  return cut.slice(0, cut.lastIndexOf(" ")).trimEnd();
+}
+
+// The queue: items nothing has claimed yet, inside the eligibility window, oldest
+// first by the outlet's publication time — the feed's own order, so the timeline
+// reads the same way round. One over the ceiling, so the caller can report what it
+// left behind instead of pretending it posted everything.
+async function getSocialQueue(): Promise<SocialItem[]> {
+  return await sql<SocialItem[]>`
+    select i.id, i.source_id, s.name as source_name, i.title, i.summary,
+           i.snippet, i.url, i.tags
+    from items i
+    join sources s on s.id = i.source_id
+    left join social_posts p on p.item_id = i.id
+    where p.item_id is null
+      and i.ingested_at > now() - ${`${SOCIAL_WINDOW_HOURS} hours`}::interval
+    order by i.published_at asc, i.id asc
+    limit ${MAX_POSTS_PER_RUN + 1}`;
+}
+
+// The other outlets on a cluster survivor, in the same order and with the same
+// exclusion as the card's "Also covered by" line. Only what is known at post time —
+// clustering can attach an outlet hours later, and a post is never edited after it.
+async function getCitations(itemId: number, primarySourceId: number): Promise<Citation[]> {
+  return await sql<Citation[]>`
+    select s.name, x.url
+    from item_sources x join sources s on s.id = x.source_id
+    where x.item_id = ${itemId} and x.source_id <> ${primarySourceId}
+    order by x.published_at asc`;
+}
+
+// Write the intent before the call. Returns 'claimed' when this execution took the
+// row, or whatever status was already there when something else did — the caller
+// treats 'pending' as "go and look" and every settled status as "leave it alone".
+async function claimSocialPost(itemId: number): Promise<string> {
+  const inserted = await sql`
+    insert into social_posts (item_id, status, attempts)
+    values (${itemId}, 'pending', 0)
+    on conflict (item_id) do nothing
+    returning item_id`;
+  if (inserted.length > 0) return "claimed";
+  const [row] = await sql<{ status: string }[]>`
+    select status from social_posts where item_id = ${itemId}`;
+  return row?.status ?? "claimed";
+}
+
+async function markSocialPosted(itemId: number, uri: string, cid: string): Promise<null> {
+  await sql`
+    update social_posts
+       set status = 'posted', post_uri = ${uri}, post_cid = ${cid},
+           posted_at = now(), last_error = null
+     where item_id = ${itemId}`;
+  return null;
+}
+
+// Each attempt is recorded as it happens, so a row that ends up parked carries how
+// many times we tried and what the API last said. `final` is the retry budget being
+// spent, not the error being worse.
+async function recordSocialFailure(itemId: number, err: string, final: boolean): Promise<null> {
+  await sql`
+    insert into social_posts (item_id, status, attempts, last_error)
+    values (${itemId}, ${final ? "failed" : "pending"}, 1, ${err.slice(0, 500)})
+    on conflict (item_id) do update set
+      status = ${final ? "failed" : "pending"},
+      attempts = social_posts.attempts + 1,
+      last_error = ${err.slice(0, 500)}
+    where social_posts.status not in ('posted', 'skipped_backfill')`;
   return null;
 }
 
