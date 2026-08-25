@@ -1,4 +1,6 @@
--- PitchRoots v2 schema (Neon Postgres)
+-- PitchRoots v2 schema (Supabase Postgres; originally authored for Neon)
+-- NOTE: the lockdown block at the foot of this file is load-bearing on Supabase.
+-- Read it before adding a table.
 create extension if not exists pg_trgm;
 
 create table if not exists sources (
@@ -327,3 +329,48 @@ create index if not exists social_posts_status_idx on social_posts (status, crea
 insert into social_posts (item_id, status)
   select id, 'skipped_backfill' from items
 on conflict (item_id) do nothing;
+
+
+-- ---------------------------------------------------------------------------
+-- Lockdown: keep this schema off the public Data API.
+--
+-- This file was written for Neon, where `public` is reachable only by whoever
+-- holds the connection string. Supabase is different: PostgREST serves `public`
+-- over https://<ref>.supabase.co/rest/v1/ to anyone presenting the `anon` key —
+-- a static, browser-shippable credential — and Supabase's default privileges
+-- grant `anon`/`authenticated` full CRUD (including TRUNCATE) on every new table
+-- in `public`. Without the two steps below, every table here is world-writable
+-- to any holder of that key. That was the live state until 2026-08-25, when
+-- Supabase's `rls_disabled_in_public` alert caught it and it was verified by
+-- probe (anon could SELECT/UPDATE/DELETE all nine tables).
+--
+-- Nothing in PitchRoots uses PostgREST: the site reads via postgres.js over the
+-- pooler as `postgres`, and the durable workflow runs as `service_role`. Both
+-- carry rolbypassrls, so denying `anon` outright costs the application nothing.
+-- There are deliberately NO policies — RLS with zero policies denies everyone
+-- who cannot bypass it, which is exactly the intent.
+--
+-- Both statements are idempotent, and the loop covers tables added later, so
+-- new tables are locked down by re-applying this file rather than by anyone
+-- remembering to. If you ever DO want a table read directly from a browser,
+-- grant it explicitly and write a policy for it — do not weaken this block.
+do $$
+declare r record;
+begin
+  for r in
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p')
+  loop
+    execute format('alter table public.%I enable row level security', r.relname);
+  end loop;
+end $$;
+
+revoke all on all tables    in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+
+-- Supabase's default privileges re-grant CRUD on every future table, which is
+-- how this hole opens itself back up. Revoke the default, not just the symptom.
+alter default privileges in schema public revoke all on tables    from anon, authenticated;
+alter default privileges in schema public revoke all on sequences from anon, authenticated;
