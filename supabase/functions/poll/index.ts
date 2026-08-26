@@ -608,6 +608,23 @@ const SOCIAL_WINDOW_HOURS = 6;
 // nothing claims those items, so the next run picks them up while they're in window.
 const MAX_POSTS_PER_RUN = 12;
 
+// The post card: our own brand art with the item's headline set on it, attached as
+// the link preview's thumbnail (web/src/lib/social-card.mjs renders it, served by
+// /api/social-card/<id>). Two things it is NOT, and the distinction is the whole
+// reason it is allowed: it is not the source's image, which §3 forbids
+// republishing, and it does not displace the link card — `external.thumb` is a
+// field *of* the link card, so the outlet, the description and the click-through
+// all survive exactly as they are.
+//
+// Default OFF. Turning it on changes what a live unattended account publishes to
+// the world, which is a SPEC §8.4 decision and not a deployment detail.
+const SOCIAL_CARD_ENABLED = (Deno.env.get("SOCIAL_CARD") ?? "off").toLowerCase() === "on";
+const SOCIAL_CARD_BASE = Deno.env.get("SOCIAL_CARD_BASE") ?? "https://pitchroots.ca";
+// bsky.social rejects a blob over 1,000,000 bytes. A 1200x630 card of flat colour
+// and text renders at 60-80KB, so this is a tripwire for a template that has gone
+// wrong, not a limit anything is expected to approach.
+const BSKY_MAX_BLOB_BYTES = 1_000_000;
+
 type SocialItem = {
   id: number;
   source_id: number;
@@ -783,8 +800,9 @@ resonate.register("postSocial", async function postSocial(ctx: Context) {
           uri: item.url,
           title: item.title,
           // The source's own description, as any link preview shows it. Capped
-          // because clients truncate anyway, and never an image: §3 forbids
-          // republishing them, and a thumb blob is exactly that.
+          // because clients truncate anyway. Never the source's OWN image: §3
+          // forbids republishing those, and a thumb blob would be exactly that —
+          // which is why the card below is drawn by us rather than fetched.
           description: embedDescription(item),
         },
       },
@@ -812,8 +830,22 @@ resonate.register("postSocial", async function postSocial(ctx: Context) {
     let ref: (PostRef & { existed: boolean }) | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        ref = (await ctx.run(() => reconcileOrPost(session!, item.url, record))) as
-          PostRef & { existed: boolean };
+        // The card is attached on the FIRST attempt only. If attempt 1 failed,
+        // the thumb is a prime suspect — a blob the PDS accepted at uploadBlob
+        // and then rejected at createRecord fails identically every time, so
+        // three attempts carrying the same picture would exhaust the retries and
+        // park an item that would post perfectly well without it. Dropping the
+        // picture on the way to the retry is what makes "degrade, never fail"
+        // true here rather than merely intended.
+        const withCard = attempt === 1;
+        ref = (await ctx.run(() =>
+          reconcileOrPost(
+            session!,
+            item.url,
+            record,
+            withCard ? () => uploadCardThumb(session!, item.id) : undefined,
+          )
+        )) as PostRef & { existed: boolean };
         break;
       } catch (err) {
         // Two durable retries, then park. ctx.sleep suspends the run at zero compute
@@ -1526,14 +1558,119 @@ async function bskyCreatePost(session: BskySession, record: unknown): Promise<Po
 // and finds the post the lost execution made instead of sending a second one. A
 // reconcile that lived in its own checkpoint would be replayed from the journal —
 // stale, and worthless exactly when it is needed.
+//
+// The card blob is minted HERE, inside the same checkpoint, for the same reason:
+// a blob that no record references is garbage-collected by the PDS, so a blob ref
+// journalled in an earlier checkpoint and replayed a day later can point at
+// nothing. Uploaded beside the createRecord that references it, it cannot rot.
 async function reconcileOrPost(
   session: BskySession,
   linkUri: string,
   record: unknown,
+  loadThumb?: () => Promise<unknown | null>,
 ): Promise<PostRef & { existed: boolean }> {
   const existing = await bskyFindPost(session, (v) => v?.embed?.external?.uri === linkUri);
   if (existing) return { ...existing, existed: true };
-  return { ...(await bskyCreatePost(session, record)), existed: false };
+
+  let toSend = record;
+  if (loadThumb) {
+    const thumb = await loadThumb();
+    // Absent thumb is not an error. The mirror's job is the headline and the link
+    // out; the card is presentation. A render blip, a cold Vercel function or an
+    // oversized PNG must cost us the picture, never the post — the alternative is
+    // an item parked for a day over an image nobody has missed yet.
+    if (thumb) {
+      const r = record as { embed: { external: Record<string, unknown> } };
+      toSend = { ...r, embed: { ...r.embed, external: { ...r.embed.external, thumb } } };
+    }
+  }
+  return { ...(await bskyCreatePost(session, toSend)), existed: false };
+}
+
+// Fetch this item's card from the site and hand it to the PDS as a blob. Every
+// failure path returns null — see the note above about presentation vs. the post.
+async function uploadCardThumb(session: BskySession, itemId: number): Promise<unknown | null> {
+  if (!SOCIAL_CARD_ENABLED) return null;
+  try {
+    // 8s, not 25s. The card is a cached static render; if it has not answered by
+    // now it is not going to, and the budget matters — this runs up to 12 times
+    // in one execution, and a long tail here pushes the whole run toward a
+    // wall-clock kill, which strands rows as `pending` instead of failing them.
+    const res = await fetch(`${SOCIAL_CARD_BASE}/api/social-card/${itemId}`, {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) {
+      console.warn(`social card ${itemId}: HTTP ${res.status}`);
+      // Drain, or the connection is held until GC across a run where the card
+      // endpoint is down — which is exactly the run that makes 12 of these.
+      await res.body?.cancel();
+      return null;
+    }
+
+    // Refuse an oversized body BEFORE buffering it. The size check used to run
+    // after arrayBuffer(), which meant a misconfigured base URL returning
+    // something huge would be fully materialised first; an isolate killed on
+    // memory is not a JS exception, so it escapes this try/catch AND the retry
+    // loop, leaving the row claimed with no verdict.
+    const declared = Number(res.headers.get("content-length") ?? "");
+    if (Number.isFinite(declared) && declared > BSKY_MAX_BLOB_BYTES) {
+      console.warn(`social card ${itemId}: content-length ${declared}, not uploading`);
+      await res.body?.cancel();
+      return null;
+    }
+
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > BSKY_MAX_BLOB_BYTES) {
+      console.warn(`social card ${itemId}: ${bytes.byteLength} bytes, not uploading`);
+      return null;
+    }
+    // Is it actually a PNG? A 200 is not proof: the renderer commits its status
+    // before it draws, so a failed render can arrive as a truncated 200 that
+    // every check above waves through. Without this, the account publishes a
+    // post whose preview image is broken — the one defect nobody is watching
+    // for, on the one path nobody is watching.
+    if (!isPng(bytes)) {
+      console.warn(`social card ${itemId}: body is not a PNG, not uploading`);
+      return null;
+    }
+    return await bskyUploadBlob(session, bytes, "image/png");
+  } catch (err) {
+    console.warn(`social card ${itemId}: ${String(err)}`);
+    return null;
+  }
+}
+
+// The 8-byte PNG signature, plus a check that the file ends in an IEND chunk —
+// together they catch both "this is not a PNG at all" and "this is a PNG that
+// stopped halfway", which is the shape a failed render actually takes.
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const PNG_IEND = [0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+function isPng(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 16) return false;
+  if (!PNG_MAGIC.every((b, i) => bytes[i] === b)) return false;
+  const tail = bytes.byteLength - PNG_IEND.length;
+  return PNG_IEND.every((b, i) => bytes[tail + i] === b);
+}
+
+// uploadBlob takes raw bytes with the image's own content-type — not multipart,
+// not base64, not JSON. It returns a blob ref that is only durable once a record
+// references it.
+async function bskyUploadBlob(
+  session: BskySession,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<unknown> {
+  const res = await fetch(`${BSKY_PDS}/xrpc/com.atproto.repo.uploadBlob`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${session.jwt}`, "content-type": mime },
+    body: bytes,
+    // 10s for an ~70KB upload. Same reasoning as the fetch above: this runs once
+    // per item, up to 12 per execution, and the run has a wall clock.
+    signal: AbortSignal.timeout(10_000),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`uploadBlob HTTP ${res.status}: ${body?.message ?? ""}`);
+  return body.blob;
 }
 
 // Same shape for the citation reply, matched on its parent instead of its link. A

@@ -103,6 +103,21 @@ export async function hasUpcomingGames(): Promise<boolean> {
   }
 }
 
+export type ItemCard = { title: string; source_name: string; tags: string[] };
+
+// The three fields the social card sets in type, by item id. Deliberately its own
+// narrow query rather than a filter over latestItems: the card endpoint is reached
+// once per item and then cached forever, and it has no business pulling summaries,
+// citation aggregates, or the hundred most recent rows to render one headline.
+export async function itemCard(id: number): Promise<ItemCard | null> {
+  const q = sql();
+  const rows = await q`
+    select i.title, s.name as source_name, i.tags
+    from items i join sources s on s.id = i.source_id
+    where i.id = ${id}`;
+  return (rows[0] as ItemCard | undefined) ?? null;
+}
+
 export async function latestItems(opts: { tag?: string; limit?: number } = {}): Promise<FeedItem[]> {
   const q = sql();
   const limit = opts.limit ?? 100;
