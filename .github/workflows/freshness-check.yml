@@ -1,0 +1,107 @@
+# Out-of-band freshness alert for the ingestion pipeline.
+#
+# The poll pipeline runs inside Supabase (pg_cron → Resonate → Edge Function). When
+# that chain breaks upstream of the function — as in the 2026-08-27 outage, where
+# the gateway 401'd every delivery for 26 hours — nothing inside it can report the
+# failure, because nothing inside it runs. This check lives on GitHub instead, a
+# different failure domain, and asks only one question: did a run finish recently?
+#
+# A failed job is the alert: GitHub emails the failure to whoever last changed this
+# schedule (Settings → Notifications → Actions must allow failure emails).
+#
+# Reads through the `pipeline_freshness()` RPC (db/schema.sql), which returns
+# timestamps only; no table is exposed to the anon key.
+name: freshness-check
+
+on:
+  schedule:
+    # Hourly, off the top of the hour, when GitHub's scheduler is least congested.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ secrets.PITCHROOTS_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.PITCHROOTS_SUPABASE_ANON_KEY }}
+      # The poll runs hourly and writes run_log at the END of a run, a few minutes
+      # past the hour. 3h tolerates two consecutive missed or slow runs before
+      # alerting, so one hiccup doesn't page anyone, and a dead pipeline is still
+      # reported within ~3-4h instead of the 26h it took a human last time.
+      # GitHub's cron firing late doesn't cause false alarms — a late check only
+      # finds out later — but it is why this isn't tighter than the gap it guards.
+      POLL_MAX_AGE_SECONDS: "10800"
+      # The games sync is daily; 30h = one day plus slack for its own scheduling.
+      GAMES_MAX_AGE_SECONDS: "108000"
+    steps:
+      - name: Check pipeline freshness
+        run: |
+          set -euo pipefail
+
+          # "Couldn't check" is a failure, not a pass: a check that can't run must
+          # not look the same as a pipeline that is fine.
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::freshness.notConfigured: PITCHROOTS_SUPABASE_URL / PITCHROOTS_SUPABASE_ANON_KEY secrets are not set"
+            exit 1
+          fi
+
+          body="$(mktemp)"
+          status="$(curl -sS -o "$body" -w '%{http_code}' --max-time 30 \
+            -X POST "${SUPABASE_URL%/}/rest/v1/rpc/pipeline_freshness" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}')" || {
+              echo "::error::freshness.unreachable: could not reach Supabase"
+              exit 1
+            }
+          if [ "$status" != "200" ]; then
+            # The body is PostgREST's error text (e.g. function not found). It
+            # carries no credentials; cap it so it can't flood the log.
+            echo "::error::freshness.queryFailed: HTTP ${status}: $(head -c 300 "$body")"
+            exit 1
+          fi
+
+          now_epoch="$(date -u +%s)"
+          age() { # seconds since an ISO timestamp; an unparseable one fails the job
+            local then_epoch
+            then_epoch="$(date -u -d "$1" +%s)"
+            echo $(( now_epoch - then_epoch ))
+          }
+
+          poll_at="$(jq -r '.poll_last_run_at // empty' "$body")"
+          games_at="$(jq -r '.games_last_ok_at // empty' "$body")"
+          games_status="$(jq -r '.games_last_status // empty' "$body")"
+          echo "poll last run: ${poll_at:-never}"
+          echo "games last ok: ${games_at:-never} (latest status: ${games_status:-none})"
+
+          failed=0
+
+          if [ -z "$poll_at" ]; then
+            echo "::error::freshness.pollStale: run_log has no rows at all"
+            failed=1
+          else
+            poll_age="$(age "$poll_at")"
+            if [ "$poll_age" -gt "$POLL_MAX_AGE_SECONDS" ]; then
+              echo "::error::freshness.pollStale: last poll run finished $(( poll_age / 60 )) min ago (limit $(( POLL_MAX_AGE_SECONDS / 60 )) min)"
+              failed=1
+            fi
+          fi
+
+          # The games sync legitimately never runs while TICKETMASTER_API_KEY is
+          # unset (it resolves `skipped` and writes no row), so "never" is a
+          # warning; a sync that used to succeed and stopped is an error.
+          if [ -z "$games_at" ]; then
+            echo "::warning::freshness.gamesNeverOk: no successful games sync on record"
+          else
+            games_age="$(age "$games_at")"
+            if [ "$games_age" -gt "$GAMES_MAX_AGE_SECONDS" ]; then
+              echo "::error::freshness.gamesStale: last successful games sync $(( games_age / 3600 )) h ago (limit $(( GAMES_MAX_AGE_SECONDS / 3600 )) h), latest status: ${games_status:-none}"
+              failed=1
+            fi
+          fi
+
+          exit "$failed"

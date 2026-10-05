@@ -330,6 +330,64 @@ insert into social_posts (item_id, status)
   select id, 'skipped_backfill' from items
 on conflict (item_id) do nothing;
 
+-- 2026-10-05 ── failures are recorded, not just thrown.
+--
+-- APPLY THIS FILE BEFORE DEPLOYING the matching poll build. The build tolerates
+-- running ahead of it (success rows don't name the new columns, and item-failure
+-- recording is best-effort), but until it is applied a failed games sync still
+-- writes no row and item failures are not counted.
+
+-- A games sync that fails now leaves a row saying so. Existing rows are successes.
+alter table games_run_log add column if not exists status text not null default 'ok';
+alter table games_run_log add column if not exists error_code text;
+alter table games_run_log add column if not exists error_message text;
+
+-- Per-item model failures, one row per (item, run). The primary key makes a
+-- replayed step idempotent, so count(*) is "how many separate runs this item has
+-- failed in". The poll function moves an item to `rejections` once item-specific
+-- failures (malformed model output, a 4xx for this input) reach its threshold;
+-- outages and rate limits are recorded here but never reject anything.
+create table if not exists item_failures (
+  source_id int not null references sources(id),
+  guid text not null,
+  run_id text not null,
+  stage text not null,      -- classify | same_story
+  code text not null,       -- llm.rateLimited, llm.malformedOutput, …
+  message text,
+  failed_at timestamptz not null default now(),
+  primary key (source_id, guid, run_id)
+);
+create index if not exists item_failures_failed_at_idx on item_failures (failed_at desc);
+
+-- Why a guid was rejected. Null on every older row (not relevant / dead link);
+-- set to e.g. 'failed 3x: llm.malformedOutput' when repeated failures put it here.
+-- Deleting the row puts the item back in play on the next run, while it is still
+-- inside the 7-day window.
+alter table rejections add column if not exists reason text;
+
+-- Freshness probe for the out-of-band alert (.github/workflows/freshness-check.yml).
+-- The lockdown below keeps every table off the Data API, and that stays true: this
+-- function returns three timestamps and a status word, nothing else — no row of any
+-- table is exposed. SECURITY DEFINER so it reads past RLS without
+-- granting anon any table; search_path pinned so it can't be hijacked.
+create or replace function public.pipeline_freshness()
+returns json
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select json_build_object(
+    'checked_at',         now(),
+    'poll_last_run_at',   (select max(ran_at) from run_log),
+    'games_last_ok_at',   (select max(ran_at) from games_run_log where status = 'ok'),
+    'games_last_status',  (select status from games_run_log order by ran_at desc limit 1)
+  )
+$$;
+-- Postgres grants EXECUTE to PUBLIC on every new function; take it back and give
+-- it to anon alone.
+revoke all on function public.pipeline_freshness() from public, authenticated;
+grant execute on function public.pipeline_freshness() to anon;
 
 -- ---------------------------------------------------------------------------
 -- Lockdown: keep this schema off the public Data API.

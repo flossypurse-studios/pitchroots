@@ -24,7 +24,22 @@ import postgres from "npm:postgres@^3.4.5";
 import { XMLParser } from "npm:fast-xml-parser@^5.10.1";
 
 const resonate = new Resonate();
-const claude = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
+
+// Every model call gets an explicit per-attempt timeout and a bounded retry. The
+// SDK's own retry is the right one to use here: it retries only connection errors,
+// timeouts, 408/409, 429 and 5xx (honouring retry-after, exponential backoff with
+// jitter), and never a response that arrived but was malformed — that fails fast
+// and is classified below. The SDK default timeout is ten minutes, which would let
+// one stuck call eat the whole invocation. A classification is a ~1k-token answer
+// that normally takes a few seconds, so 30s per attempt is generous, and the worst
+// case (3 attempts + backoff) stays well under the Edge Function wall clock.
+const LLM_TIMEOUT_MS = 30_000;
+const LLM_MAX_RETRIES = 2;
+const claude = new Anthropic({
+  apiKey: Deno.env.get("ANTHROPIC_API_KEY")!,
+  timeout: LLM_TIMEOUT_MS,
+  maxRetries: LLM_MAX_RETRIES,
+});
 
 // postgres.js over the Supabase pooler: prepare:false + max:1 is the pooler-safe
 // setting (transaction-mode pooling rejects prepared statements).
@@ -44,6 +59,16 @@ const MAX_ITEM_AGE_DAYS = 7;
 // Per-source cap. In the old single-pass loop this was one global cap of 40;
 // now that sources fan out and run concurrently, the fair unit is per-source.
 const MAX_NEW_PER_SOURCE = 12;
+// Runs in which one item may fail an item-specific model call before it is moved
+// to `rejections` and never offered again. 3 = three separate hourly runs, so a
+// failure has to persist for 2+ hours: long enough that a one-off glitch can't
+// drop a real story, short enough that a poison item stops costing a model call
+// every hour. Only failures attributable to the item count — see
+// REJECTABLE_FAILURE_CODES; an outage or a rate limit never rejects anything.
+const MAX_ITEM_FAILURES = 3;
+const REJECTABLE_FAILURE_CODES = ["llm.malformedOutput", "llm.badRequest"];
+// Distinct failure messages kept per source per run in run_log.per_source.
+const ITEM_FAILURE_SAMPLES = 5;
 // Consecutive whole-poll failures before a source is auto-parked (active=false).
 // ~24 ≈ a day of hourly failures; recheckDisabledSources heals it when it recovers.
 const FAIL_DISABLE_THRESHOLD = 24;
@@ -93,8 +118,153 @@ type SourceStats = {
   published: number;
   attached: number;
   dropped: number;
+  // Per-item model failures this run (classify or same-story), by code, plus up to
+  // ITEM_FAILURE_SAMPLES distinct messages. Kept apart from `error`, which is the
+  // source-level failure (the feed itself could not be read).
+  itemFailures?: number;
+  failureCodes?: Record<string, number>;
+  failureSamples?: string[];
+  // Items that crossed MAX_ITEM_FAILURES this run and were moved to `rejections`.
+  rejectedAfterFailures?: number;
   error?: string;
 };
+
+// ── error taxonomy ───────────────────────────────────────────────────────────
+//
+// Every failure that leaves an external call carries a stable `code` so the run
+// logs can say WHAT kind of failure happened, not just print a stack. `kind`
+// drives retry decisions: only `transient` is ever retried.
+//
+// The code also rides at the front of the message ("llm.rateLimited: …") on
+// purpose. Resonate's checkpoint codec keeps only an error's name, message and
+// stack — a custom `code` property does not survive a replay — so describeError()
+// can always recover the code from the message.
+type ErrorKind = "transient" | "external" | "bug";
+type ErrorCode =
+  | "llm.rateLimited" // 429 after the SDK's retries
+  | "llm.network" // connection failure or per-attempt timeout, after retries
+  | "llm.unavailable" // 5xx / overloaded, after retries
+  | "llm.malformedOutput" // the model answered, but not with the tool call we require
+  | "llm.badRequest" // 400/413/422: the API refused this particular input
+  | "llm.auth" // 401/403: key or account problem, never item-specific
+  | "llm.other"
+  | "games.rateLimited"
+  | "games.network"
+  | "games.unavailable"
+  | "games.rejected" // a non-retryable 4xx, e.g. a bad API key
+  | "games.malformedResponse"
+  | "internal.other";
+
+class PollError extends Error {
+  constructor(
+    readonly code: ErrorCode,
+    readonly kind: ErrorKind,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`${code}: ${message}`, options);
+    this.name = "PollError";
+  }
+}
+
+const ERROR_MESSAGE_MAX = 300;
+
+// Error text ends up in Postgres rows, so it must never carry a credential. Deno's
+// fetch errors include the full request URL, and the Ticketmaster key travels in
+// the query string — so a plain network failure would otherwise write the key into
+// games_run_log.
+function scrubSecrets(msg: string): string {
+  let out = msg.replace(/([?&]apikey=)[^&\s)"']+/gi, "$1[redacted]");
+  for (const name of ["TICKETMASTER_API_KEY", "ANTHROPIC_API_KEY", "REVALIDATE_SECRET", "BLUESKY_APP_PASSWORD"]) {
+    const v = Deno.env.get(name);
+    if (v && v.length >= 8) out = out.split(v).join("[redacted]");
+  }
+  return out;
+}
+
+function describeError(err: unknown): { code: string; message: string } {
+  const raw = err instanceof Error ? err.message : String(err);
+  const message = scrubSecrets(raw).slice(0, ERROR_MESSAGE_MAX);
+  if (err instanceof PollError) return { code: err.code, message };
+  const m = raw.match(/^([a-z]+\.[A-Za-z]+): /);
+  return { code: m ? m[1] : "internal.other", message };
+}
+
+// The outcome of a step that is allowed to fail without failing the run. Returned
+// from inside ctx.run rather than thrown, so the code survives the checkpoint
+// intact and a replay sees exactly the same outcome.
+type StepResult<T> = { ok: true; value: T } | { ok: false; code: string; message: string };
+
+async function attempt<T>(fn: () => Promise<T>): Promise<StepResult<T>> {
+  try {
+    return { ok: true, value: await fn() };
+  } catch (err) {
+    return { ok: false, ...describeError(err) };
+  }
+}
+
+// A checkpoint written by the previous build of this function holds the bare value
+// (a Classification, or a boolean), not a StepResult. A run that was in flight
+// across a deploy replays those checkpoints, so read either shape.
+function asStep<T>(r: unknown): StepResult<T> {
+  if (r !== null && typeof r === "object" && "ok" in r) return r as StepResult<T>;
+  return { ok: true, value: r as T };
+}
+
+// Map whatever the Anthropic SDK threw (after its own retries) to a code.
+function llmError(err: unknown, call: string): PollError {
+  if (err instanceof PollError) return err;
+  const detail = err instanceof Error ? err.message : String(err);
+  const opts = { cause: err };
+  if (err instanceof Anthropic.APIConnectionTimeoutError) {
+    return new PollError("llm.network", "transient", `${call}: timed out after ${LLM_TIMEOUT_MS / 1000}s per attempt`, opts);
+  }
+  if (err instanceof Anthropic.APIConnectionError) {
+    return new PollError("llm.network", "transient", `${call}: ${detail}`, opts);
+  }
+  if (err instanceof Anthropic.RateLimitError) {
+    return new PollError("llm.rateLimited", "transient", `${call}: ${detail}`, opts);
+  }
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return new PollError("llm.auth", "external", `${call}: ${detail}`, opts);
+  }
+  if (err instanceof Anthropic.APIError) {
+    const status = err.status ?? 0;
+    if (status >= 500) return new PollError("llm.unavailable", "transient", `${call}: ${detail}`, opts);
+    // An exhausted credit balance comes back as a 400, but it is an account
+    // problem, not this item's: classed as badRequest it would reject every item
+    // offered during a three-hour lapse, permanently.
+    if (status === 400 && /credit balance/i.test(detail)) {
+      return new PollError("llm.auth", "external", `${call}: ${detail}`, opts);
+    }
+    if (status === 400 || status === 413 || status === 422) {
+      return new PollError("llm.badRequest", "external", `${call}: ${detail}`, opts);
+    }
+  }
+  return new PollError("llm.other", "bug", `${call}: ${detail}`, opts);
+}
+
+// One forced-tool model call. Returns the tool input, or throws a PollError.
+async function callTool(
+  call: string,
+  params: Anthropic.MessageCreateParamsNonStreaming,
+): Promise<Record<string, unknown>> {
+  let response: Anthropic.Message;
+  try {
+    response = await claude.messages.create(params);
+  } catch (err) {
+    throw llmError(err, call);
+  }
+  const block = response.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+  );
+  if (!block || block.input === null || typeof block.input !== "object") {
+    // Not retried: the call succeeded, and asking the same question again is a
+    // per-item decision for ingestSource, not a transport retry.
+    throw new PollError("llm.malformedOutput", "external", `${call}: no tool_use block (stop_reason=${response.stop_reason})`);
+  }
+  return block.input as Record<string, unknown>;
+}
 
 // ── pure helpers (identical logic to the original pipeline) ──────────────────
 
@@ -294,7 +464,7 @@ async function classify(source: SourceRow, c: Candidate): Promise<Classification
       "SECOND — does it involve a Canadian team, league, competition, or Canadian player? Generic international soccer coverage is NOT relevant. " +
       "If you cannot tell which sport an item is about, it is NOT relevant."
     : "This source covers Canadian soccer: default to relevant unless the item is clearly not about association football (soccer).";
-  const response = await claude.messages.create({
+  const input = await callTool("classify", {
     model: "claude-haiku-4-5",
     max_tokens: 1024,
     tools: [CLASSIFY_TOOL],
@@ -316,11 +486,17 @@ async function classify(source: SourceRow, c: Candidate): Promise<Classification
       },
     ],
   });
-  const block = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-  );
-  if (!block) throw new Error(`no tool_use block (stop_reason=${response.stop_reason})`);
-  return block.input as Classification;
+  // The schema is `strict`, but this used to be an unchecked cast — a missing
+  // `tags` would surface later as a TypeError with no hint of where it came from.
+  if (
+    typeof input.relevant !== "boolean" ||
+    !Array.isArray(input.tags) ||
+    !input.tags.every((t) => typeof t === "string") ||
+    typeof input.summary !== "string"
+  ) {
+    throw new PollError("llm.malformedOutput", "external", "classify: tool input does not match the classify_item schema");
+  }
+  return { relevant: input.relevant, tags: input.tags as string[], summary: input.summary };
 }
 
 const SAME_STORY_TOOL: Anthropic.Tool = {
@@ -347,7 +523,7 @@ const SAME_STORY_TOOL: Anthropic.Tool = {
 // different match previews score 0.62, while a real cross-outlet pair on the same
 // signing scores 0.64. No threshold separates them, so a model settles it.
 async function isSameStory(a: Candidate, b: { title: string; summary: string }): Promise<boolean> {
-  const response = await claude.messages.create({
+  const input = await callTool("same_story", {
     model: "claude-haiku-4-5",
     max_tokens: 256,
     tools: [SAME_STORY_TOOL],
@@ -383,11 +559,10 @@ async function isSameStory(a: Candidate, b: { title: string; summary: string }):
       },
     ],
   });
-  const block = response.content.find(
-    (bl): bl is Anthropic.ToolUseBlock => bl.type === "tool_use",
-  );
-  if (!block) throw new Error(`no tool_use block (stop_reason=${response.stop_reason})`);
-  return Boolean((block.input as { same: boolean }).same);
+  if (typeof input.same !== "boolean") {
+    throw new PollError("llm.malformedOutput", "external", "same_story: tool input has no boolean `same`");
+  }
+  return input.same;
 }
 
 // ── durable functions ────────────────────────────────────────────────────────
@@ -449,6 +624,14 @@ resonate.register("poll", async function poll(ctx: Context) {
     classified: results.reduce((n, r) => n + r.classified, 0),
     deadLinks: results.reduce((n, r) => n + r.deadLinks, 0),
     dropped: results.reduce((n, r) => n + r.dropped, 0),
+    // Run-wide view of per-item model failures; the per-source detail (codes and
+    // sample messages) is in perSource, which run_log keeps as per_source.
+    itemFailures: results.reduce((n, r) => n + (r.itemFailures ?? 0), 0),
+    failureCodes: results.reduce((acc, r) => {
+      for (const [code, n] of Object.entries(r.failureCodes ?? {})) acc[code] = (acc[code] ?? 0) + n;
+      return acc;
+    }, {} as Record<string, number>),
+    rejectedAfterFailures: results.reduce((n, r) => n + (r.rejectedAfterFailures ?? 0), 0),
     social,
     perSource: results,
   };
@@ -468,7 +651,30 @@ resonate.register("poll", async function poll(ctx: Context) {
 resonate.register("ingestSource", async function ingestSource(ctx: Context, source: SourceRow) {
   const stats: SourceStats = {
     source: source.name, fetched: 0, deadLinks: 0, classified: 0, published: 0,
-    attached: 0, dropped: 0,
+    attached: 0, dropped: 0, itemFailures: 0, failureCodes: {}, failureSamples: [],
+    rejectedAfterFailures: 0,
+  };
+
+  // An item whose model call failed is skipped for this run and retried next run —
+  // but not forever. The failure is persisted per (source, guid, run), so the count
+  // survives across hourly runs; once an item-specific failure has happened in
+  // MAX_ITEM_FAILURES separate runs, recordItemFailure moves the guid into
+  // `rejections` and alreadySeen() stops offering it.
+  const recordFailure = async (
+    c: Candidate,
+    stage: "classify" | "same_story",
+    f: { code: string; message: string },
+  ) => {
+    stats.itemFailures = (stats.itemFailures ?? 0) + 1;
+    stats.failureCodes![f.code] = (stats.failureCodes![f.code] ?? 0) + 1;
+    const sample = `${stage}: ${f.message}`;
+    if (stats.failureSamples!.length < ITEM_FAILURE_SAMPLES && !stats.failureSamples!.includes(sample)) {
+      stats.failureSamples!.push(sample);
+    }
+    const rec = (await ctx.run(() =>
+      recordItemFailure(source.id, c.guid, ctx.originId, stage, f.code, f.message)
+    )) as { rejected: boolean };
+    if (rec.rejected) stats.rejectedAfterFailures = (stats.rejectedAfterFailures ?? 0) + 1;
   };
 
   // Durable retry with backoff: one flaky fetch shouldn't cost a source its whole
@@ -537,12 +743,25 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
     )) as StoryCandidate[];
 
     let attachedTo: number | null = null;
+    let sameStoryFailure: { code: string; message: string } | null = null;
     for (const cand of candidates) {
-      const same = (await ctx.run(() => isSameStory(c, cand))) as boolean;
-      if (same) {
+      const same = asStep<boolean>(await ctx.run(() => attempt(() => isSameStory(c, cand))));
+      if (!same.ok) {
+        sameStoryFailure = same;
+        break;
+      }
+      if (same.value) {
         attachedTo = cand.id;
         break;
       }
+    }
+    if (sameStoryFailure) {
+      // Can't tell whether this is a story we already carry. Publishing it anyway
+      // risks a duplicate card; skip it this run and let the next run decide.
+      // (This used to throw out of ingestSource and lose the rest of the source.)
+      taken++;
+      await recordFailure(c, "same_story", sameStoryFailure);
+      continue;
     }
     if (attachedTo !== null) {
       await ctx.run(() => attachSource(attachedTo, source.id, c));
@@ -562,14 +781,13 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
 
     // Classify (the LLM call — the expensive checkpoint). Once this step is
     // recorded, no crash will ever re-invoke Claude for this article.
-    let result: Classification;
-    try {
-      result = (await ctx.run(() => classify(source, c))) as Classification;
-      stats.classified++;
-    } catch (err) {
-      stats.error = String(err);
+    const step = asStep<Classification>(await ctx.run(() => attempt(() => classify(source, c))));
+    if (!step.ok) {
+      await recordFailure(c, "classify", step);
       continue;
     }
+    const result = step.value;
+    stats.classified++;
 
     const tags = result.tags.filter((t) => TAG_SLUGS.includes(t));
     if (!result.relevant || !result.summary.trim()) {
@@ -1085,30 +1303,44 @@ resonate.register("pollGames", async function pollGames(ctx: Context) {
     return { skipped: "TICKETMASTER_API_KEY not set" };
   }
 
-  // Checkpointed clock, same rule as ingestSource: every replay must query the
-  // same window.
-  const now = (await ctx.run(() => Date.now())) as number;
+  // Every way this run can fail must still leave a row in games_run_log. Before
+  // this catch, a Ticketmaster 500 threw straight out and wrote nothing, and an
+  // absent row reads as "hasn't run yet", not "broken". fetchGamesPage has already
+  // retried transient failures by the time anything reaches here.
+  try {
+    // Checkpointed clock, same rule as ingestSource: every replay must query the
+    // same window.
+    const now = (await ctx.run(() => Date.now())) as number;
 
-  const rows: GameRow[] = [];
-  let totalPages = 1;
-  for (let page = 0; page < totalPages && page < TM_MAX_PAGES; page++) {
-    const res = (await ctx.run(() => fetchGamesPage(now, page))) as {
-      totalPages: number;
-      rows: GameRow[];
-    };
-    totalPages = res.totalPages;
-    rows.push(...res.rows);
+    const rows: GameRow[] = [];
+    let totalPages = 1;
+    for (let page = 0; page < totalPages && page < TM_MAX_PAGES; page++) {
+      const res = (await ctx.run(() => fetchGamesPage(now, page))) as {
+        totalPages: number;
+        rows: GameRow[];
+      };
+      totalPages = res.totalPages;
+      rows.push(...res.rows);
+    }
+
+    const upserted = (await ctx.run(() => upsertGames(rows))) as number;
+    // New games or moved kickoffs should show without waiting for the ISR timer.
+    if (rows.length > 0) await ctx.run(() => triggerRevalidate());
+
+    const byCompetition: Record<string, number> = {};
+    for (const r of rows) byCompetition[r.competition] = (byCompetition[r.competition] ?? 0) + 1;
+    const summary = { fetched: rows.length, mapped: rows.filter((r) => r.competition !== "other").length, upserted, byCompetition };
+    await ctx.run(() => logGamesRun(ctx.originId, summary));
+    return { status: "ok" as const, ...summary };
+  } catch (err) {
+    // Records it and resolves with a typed failure rather than
+    // rethrowing: the row is the signal, and the next daily run is the retry. If
+    // this write fails too, that throws — and the freshness check, which lives
+    // outside this function, is what notices a missing row.
+    const failure = describeError(err);
+    await ctx.run(() => logGamesFailure(ctx.originId, failure));
+    return { status: "failed" as const, ...failure };
   }
-
-  const upserted = (await ctx.run(() => upsertGames(rows))) as number;
-  // New games or moved kickoffs should show without waiting for the ISR timer.
-  if (rows.length > 0) await ctx.run(() => triggerRevalidate());
-
-  const byCompetition: Record<string, number> = {};
-  for (const r of rows) byCompetition[r.competition] = (byCompetition[r.competition] ?? 0) + 1;
-  const summary = { fetched: rows.length, mapped: rows.filter((r) => r.competition !== "other").length, upserted, byCompetition };
-  await ctx.run(() => logGamesRun(ctx.originId, summary));
-  return summary;
 });
 
 resonate.httpHandler();
@@ -1220,6 +1452,45 @@ async function isDuplicateLink(canonicalUrl: string): Promise<boolean> {
 async function remember(sourceId: number, guid: string): Promise<null> {
   await sql`insert into rejections (source_id, guid) values (${sourceId}, ${guid}) on conflict do nothing`;
   return null;
+}
+
+// Persist one item's model failure for this run, and reject the item once it has
+// failed in MAX_ITEM_FAILURES separate runs. Keyed on (source, guid, run), so a
+// replay of this step re-inserts the same row and the count stays exact — a run
+// counts once however many times it replays.
+//
+// best-effort: losing a failure record costs at most one extra retry next hour,
+// whereas letting this throw would abort ingestSource and drop every remaining
+// item in the source. That includes running ahead of the schema: if item_failures
+// doesn't exist yet the pipeline keeps publishing, and the warn line says why.
+async function recordItemFailure(
+  sourceId: number,
+  guid: string,
+  runId: string,
+  stage: string,
+  code: string,
+  message: string,
+): Promise<{ failures: number; rejected: boolean }> {
+  try {
+    await sql`
+      insert into item_failures (source_id, guid, run_id, stage, code, message)
+      values (${sourceId}, ${guid}, ${runId}, ${stage}, ${code}, ${message})
+      on conflict (source_id, guid, run_id) do nothing`;
+    if (!REJECTABLE_FAILURE_CODES.includes(code)) return { failures: 0, rejected: false };
+    const [{ n }] = await sql<{ n: number }[]>`
+      select count(*)::int as n from item_failures
+       where source_id = ${sourceId} and guid = ${guid}
+         and code = any(${REJECTABLE_FAILURE_CODES})`;
+    if (n < MAX_ITEM_FAILURES) return { failures: n, rejected: false };
+    await sql`
+      insert into rejections (source_id, guid, reason)
+      values (${sourceId}, ${guid}, ${`failed ${n}x: ${code}`})
+      on conflict do nothing`;
+    return { failures: n, rejected: true };
+  } catch (err) {
+    console.warn(`[poll] poll.itemFailureNotRecorded source=${sourceId}: ${describeError(err).message}`);
+    return { failures: 0, rejected: false };
+  }
 }
 
 type StoryCandidate = { id: number; title: string; summary: string };
@@ -1392,7 +1663,32 @@ async function flagOffTopicItems(): Promise<number> {
 // the slim GameRow shape (the raw payload is too large to checkpoint). The
 // startDateTime derives from the checkpointed run clock, so a replay requests
 // the same window. Ticketmaster rejects fractional seconds in datetimes.
+//
+// A read, so retrying is safe: up to 4 attempts, backing off ~0.5s, ~1.5s, ~4s
+// (each ±50% jitter) — about 6s of waiting in total, short enough to stay inside
+// the step rather than needing a durable sleep. Only transient failures (network,
+// timeout, 429, 5xx) are retried; a 4xx such as a bad key fails on the first try.
+const GAMES_FETCH_BACKOFF_MS = [500, 1_500, 4_000];
+
 async function fetchGamesPage(
+  now: number,
+  page: number,
+): Promise<{ totalPages: number; rows: GameRow[] }> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fetchGamesPageOnce(now, page);
+    } catch (err) {
+      const e = err instanceof PollError
+        ? err
+        : new PollError("internal.other", "bug", err instanceof Error ? err.message : String(err), { cause: err });
+      if (e.kind !== "transient" || i >= GAMES_FETCH_BACKOFF_MS.length) throw e;
+      const delay = GAMES_FETCH_BACKOFF_MS[i] * (0.5 + Math.random());
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
+async function fetchGamesPageOnce(
   now: number,
   page: number,
 ): Promise<{ totalPages: number; rows: GameRow[] }> {
@@ -1406,12 +1702,44 @@ async function fetchGamesPage(
     size: String(TM_PAGE_SIZE),
     page: String(page),
   });
-  const res = await fetch(
-    `https://app.ticketmaster.com/discovery/v2/events.json?${params}`,
-    { signal: AbortSignal.timeout(20_000) },
-  );
-  if (!res.ok) throw new Error(`Ticketmaster HTTP ${res.status}`);
-  const doc = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://app.ticketmaster.com/discovery/v2/events.json?${params}`,
+      { signal: AbortSignal.timeout(20_000) },
+    );
+  } catch (err) {
+    // The raw message embeds the request URL, key included; describeError scrubs
+    // it before anything is stored, but don't carry it further than needed.
+    const timedOut = err instanceof DOMException && err.name === "TimeoutError";
+    throw new PollError(
+      "games.network",
+      "transient",
+      timedOut ? `Ticketmaster page ${page}: timed out after 20s` : `Ticketmaster page ${page}: ${scrubSecrets(String(err))}`,
+      { cause: err },
+    );
+  }
+  if (res.status === 429) {
+    throw new PollError("games.rateLimited", "transient", `Ticketmaster page ${page}: HTTP 429`);
+  }
+  if (res.status >= 500) {
+    throw new PollError("games.unavailable", "transient", `Ticketmaster page ${page}: HTTP ${res.status}`);
+  }
+  if (!res.ok) {
+    throw new PollError("games.rejected", "external", `Ticketmaster page ${page}: HTTP ${res.status}`);
+  }
+  // deno-lint-ignore no-explicit-any
+  let doc: any;
+  try {
+    doc = await res.json();
+  } catch (err) {
+    // A JSON syntax error is a bad body (not retried); anything else is the
+    // connection dropping mid-read, which is.
+    if (err instanceof SyntaxError) {
+      throw new PollError("games.malformedResponse", "external", `Ticketmaster page ${page}: body is not JSON`, { cause: err });
+    }
+    throw new PollError("games.network", "transient", `Ticketmaster page ${page}: body read failed`, { cause: err });
+  }
   const events: unknown[] = doc?._embedded?.events ?? [];
   return {
     totalPages: doc?.page?.totalPages ?? 1,
@@ -1457,6 +1785,20 @@ async function logGamesRun(
   await sql`
     insert into games_run_log (origin_id, fetched, mapped, upserted, by_competition)
     values (${originId}, ${s.fetched}, ${s.mapped}, ${s.upserted}, ${sql.json(s.byCompetition)})
+    on conflict (origin_id) do nothing`;
+  return null;
+}
+
+// The failed-run row. Success rows above don't name `status` (the column defaults
+// to 'ok'), so a success still logs if this build is deployed before the schema
+// change is applied; only this path needs the new columns.
+async function logGamesFailure(
+  originId: string,
+  f: { code: string; message: string },
+): Promise<null> {
+  await sql`
+    insert into games_run_log (origin_id, status, error_code, error_message)
+    values (${originId}, 'failed', ${f.code}, ${f.message})
     on conflict (origin_id) do nothing`;
   return null;
 }
@@ -1778,14 +2120,20 @@ async function triggerRevalidate(): Promise<null> {
   const url = Deno.env.get("REVALIDATE_URL");
   const secret = Deno.env.get("REVALIDATE_SECRET");
   if (!url || !secret) return null;
+  // best-effort: the ISR timer is the backstop, so a lost ping only delays fresh
+  // pages by up to 15 minutes — but say so, so a persistently broken route shows.
   try {
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { authorization: `Bearer ${secret}` },
       signal: AbortSignal.timeout(10_000),
     });
-  } catch {
-    /* the ISR timer is the backstop */
+    if (!res.ok) {
+      const body = (await res.text().catch(() => "")).slice(0, 200);
+      console.warn(`[poll] revalidate.rejected: HTTP ${res.status} ${body}`);
+    }
+  } catch (err) {
+    console.warn(`[poll] revalidate.unreachable: ${describeError(err).message}`);
   }
   return null;
 }
