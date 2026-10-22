@@ -1,4 +1,4 @@
-// Tiny script-level check for supabase/functions/poll/entities.ts — this repo has
+// Tiny script-level check for supabase/functions/poll/entities.mjs — this repo has
 // no test runner configured, so `node scripts/assert-entities.mjs` is it.
 import assert from "node:assert/strict";
 import { decodeEntities } from "../supabase/functions/poll/entities.mjs";
