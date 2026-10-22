@@ -14,6 +14,9 @@ export function SourceLogo({ name, size = 18 }: { name: string; size?: number })
         width={size}
         height={size}
         loading="lazy"
+        // Already normalised to 64×64 by the fetch script; serve the static file
+        // directly so a Vercel image-optimizer error or quota can't break it.
+        unoptimized
         className="shrink-0 rounded-full border border-line bg-card object-contain"
       />
     );

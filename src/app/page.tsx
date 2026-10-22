@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { hasUpcomingGames, latestItems, upcomingGames } from "@/lib/db";
 import { tagBySlug } from "@/lib/tags";
+import { SourceLogo } from "@/components/SourceLogo";
 
 export const revalidate = 900;
 
@@ -81,7 +82,8 @@ export default async function HomePage() {
               {items.map((i) => (
                 <li key={i.id} className="text-sm leading-snug">
                   <span className="font-semibold">{i.title}</span>{" "}
-                  <span className="text-xs text-muted uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1 align-middle text-xs text-muted uppercase tracking-wide">
+                    <SourceLogo name={i.source_name} size={14} />
                     {i.source_name}
                   </span>
                 </li>
