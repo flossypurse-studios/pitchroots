@@ -15,6 +15,7 @@
 // like `border` resolves but `background` shorthand with multiple layers does not.
 import { createElement as h } from "react";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { artLayer } from "./social-card-art.mjs";
 
@@ -54,6 +55,107 @@ function fitHeadline(title) {
   return `${(lastSpace > 80 ? cut.slice(0, lastSpace) : cut).replace(/[,;:.\s]+$/, "")}…`;
 }
 
+// ── source attribution mark ──────────────────────────────────────────────────
+// The point of this card: an outlet credited by name beside its own logo, not
+// just named. Prefers the 256px variant fetch-social-card-logos.mjs builds for
+// this exact use — the 64px file the site uses at 18px looks soft blown up to
+// card size — and falls back to the 64px file, then a monogram, never a broken
+// image. Read with readFileSync and memoised: a cold start pays for the disk
+// read once, not once per request, and the plain-JSON read sidesteps Node's
+// import-attribute requirement for `import ... with { type: "json" }`.
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+let _logoManifests = null;
+function logoManifests(assetsDir) {
+  if (_logoManifests) return _logoManifests;
+  const root = assetsDir ?? process.cwd();
+  _logoManifests = {
+    hi: readJson(join(root, "src", "lib", "source-logos-256-manifest.json")),
+    lo: readJson(join(root, "src", "lib", "source-logos-manifest.json")),
+  };
+  return _logoManifests;
+}
+
+const _logoDataUriCache = new Map();
+function logoDataUri(publicPath, root) {
+  if (_logoDataUriCache.has(publicPath)) return _logoDataUriCache.get(publicPath);
+  let uri = null;
+  try {
+    const bytes = readFileSync(join(root, "public", publicPath.replace(/^\//, "")));
+    uri = `data:image/png;base64,${bytes.toString("base64")}`;
+  } catch {
+    uri = null;
+  }
+  _logoDataUriCache.set(publicPath, uri);
+  return uri;
+}
+
+const LOGO_PLATE_SIZE = 56;
+
+function sourceMark(sourceName, assetsDir) {
+  const root = assetsDir ?? process.cwd();
+  const { hi, lo } = logoManifests(root);
+  const hiEntry = hi[sourceName];
+  const loEntry = lo[sourceName];
+  const uri =
+    (hiEntry?.status === "ok" && logoDataUri(hiEntry.file, root)) ||
+    (loEntry?.status === "ok" && logoDataUri(loEntry.file, root)) ||
+    null;
+
+  if (uri) {
+    // A light plate under every mark, win or lose on the source's own colours —
+    // some marks ship with their own baked-in dark background and some are
+    // transparent line art that would vanish on the card's dark pitch ground.
+    // One rule that handles both beats guessing per-logo.
+    const imgSize = LOGO_PLATE_SIZE - 14;
+    return h(
+      "div",
+      {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: LOGO_PLATE_SIZE,
+          height: LOGO_PLATE_SIZE,
+          marginRight: 20,
+          borderRadius: 12,
+          background: CREAM,
+        },
+      },
+      h("img", { src: uri, width: imgSize, height: imgSize }),
+    );
+  }
+
+  // No verified mark: a monogram chip, same slot and size, never a missing or
+  // broken image.
+  const initial = sourceName.trim().charAt(0).toUpperCase() || "?";
+  return h(
+    "div",
+    {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: LOGO_PLATE_SIZE,
+        height: LOGO_PLATE_SIZE,
+        marginRight: 20,
+        borderRadius: 12,
+        background: BARK,
+        fontSize: 28,
+        fontWeight: 900,
+        color: CREAM,
+      },
+    },
+    initial,
+  );
+}
+
 function chip(label, key) {
   return h(
     "div",
@@ -85,7 +187,14 @@ function chip(label, key) {
  *   seed is the ITEM ID, not a random number: the card lives at an immutable
  *   URL that Bluesky refetches, so the same item must always draw the same field.
  */
-export function socialCard({ title, sourceName, tagLabels = [], seed = 0, pattern = "pitch" }) {
+export function socialCard({
+  title,
+  sourceName,
+  tagLabels = [],
+  seed = 0,
+  pattern = "pitch",
+  assetsDir,
+}) {
   const headline = fitHeadline(title);
 
   return h(
@@ -166,7 +275,7 @@ export function socialCard({ title, sourceName, tagLabels = [], seed = 0, patter
       h(
         "div",
         { style: { display: "flex", alignItems: "center" } },
-        h("div", { style: { width: 86, height: 8, background: BARK, marginRight: 26 } }),
+        sourceMark(sourceName, assetsDir),
         h(
           "div",
           { style: { fontSize: 31, fontWeight: 600, color: MUTED } },

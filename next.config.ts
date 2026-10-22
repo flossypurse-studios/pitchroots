@@ -54,8 +54,18 @@ const nextConfig: NextConfig = {
   // deploys without its fonts and fails at request time — on a deploy whose build
   // went green and whose every page renders. Stated explicitly rather than left
   // to static analysis of the path expression.
+  // The source logo manifests and PNGs are the same story: sourceMark() in
+  // social-card.mjs readFileSync's them directly rather than importing them, so
+  // a missing entry here is a silent fallback-to-monogram in production, never
+  // a build failure.
   outputFileTracingIncludes: {
-    "/api/social-card/[id]": ["./assets/Archivo-*.ttf"],
+    "/api/social-card/[id]": [
+      "./assets/Archivo-*.ttf",
+      "./public/source-logos/*.png",
+      "./public/source-logos-256/*.png",
+      "./src/lib/source-logos-manifest.json",
+      "./src/lib/source-logos-256-manifest.json",
+    ],
   },
 
   // The 2026-08 information-architecture change: the news feed moved from `/`

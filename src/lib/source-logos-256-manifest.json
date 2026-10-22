@@ -1,0 +1,112 @@
+{
+  "Toronto Star Soccer": {
+    "key": "toronto-star-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/toronto-star-soccer.png"
+  },
+  "Sportsnet Soccer": {
+    "key": "sportsnet-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/sportsnet-soccer.png"
+  },
+  "Northern Tribune": {
+    "key": "northern-tribune",
+    "status": "ok",
+    "file": "/source-logos-256/northern-tribune.png"
+  },
+  "League1 Ontario": {
+    "key": "league1-ontario",
+    "status": "ok",
+    "file": "/source-logos-256/league1-ontario.png"
+  },
+  "CBC Soccer": {
+    "key": "cbc-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/cbc-soccer.png"
+  },
+  "Alberta Soccer": {
+    "key": "alberta-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/alberta-soccer.png"
+  },
+  "Soccer Nova Scotia": {
+    "key": "soccer-nova-scotia",
+    "status": "ok",
+    "file": "/source-logos-256/soccer-nova-scotia.png"
+  },
+  "Daily Hive Offside": {
+    "key": "daily-hive-offside",
+    "status": "ok",
+    "file": "/source-logos-256/daily-hive-offside.png"
+  },
+  "Canada Soccer": {
+    "key": "canada-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/canada-soccer.png"
+  },
+  "TrueNorthFoot": {
+    "key": "truenorthfoot",
+    "status": "ok",
+    "file": "/source-logos-256/truenorthfoot.png"
+  },
+  "The Third Sub": {
+    "key": "the-third-sub",
+    "status": "ok",
+    "file": "/source-logos-256/the-third-sub.png"
+  },
+  "Waking The Red": {
+    "key": "waking-the-red",
+    "status": "ok",
+    "file": "/source-logos-256/waking-the-red.png"
+  },
+  "Edmonton Journal Soccer": {
+    "key": "edmonton-journal-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/edmonton-journal-soccer.png"
+  },
+  "Calgary Herald Soccer": {
+    "key": "calgary-herald-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/calgary-herald-soccer.png"
+  },
+  "The Province Soccer": {
+    "key": "the-province-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/the-province-soccer.png"
+  },
+  "Toronto Sun Soccer": {
+    "key": "toronto-sun-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/toronto-sun-soccer.png"
+  },
+  "Windsor Star Soccer": {
+    "key": "windsor-star-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/windsor-star-soccer.png"
+  },
+  "Sudbury Star Soccer": {
+    "key": "sudbury-star-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/sudbury-star-soccer.png"
+  },
+  "Sault Star Soccer": {
+    "key": "sault-star-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/sault-star-soccer.png"
+  },
+  "Kingston Whig-Standard Soccer": {
+    "key": "kingston-whig-standard-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/kingston-whig-standard-soccer.png"
+  },
+  "Globe and Mail Soccer": {
+    "key": "globe-and-mail-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/globe-and-mail-soccer.png"
+  },
+  "Winnipeg Free Press Soccer": {
+    "key": "winnipeg-free-press-soccer",
+    "status": "ok",
+    "file": "/source-logos-256/winnipeg-free-press-soccer.png"
+  }
+}

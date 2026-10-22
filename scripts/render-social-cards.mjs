@@ -24,11 +24,17 @@ const { ImageResponse } = require("next/og");
 // character monster that the smallest bucket has to absorb. The seeds are spread
 // out so consecutive cards show the generator's range rather than its middle.
 const SAMPLES = [
+  // Square, light, opaque logo — the common case.
   { seed: 7, title: "Canada Soccer Election Results", sourceName: "Canada Soccer", tagLabels: ["CanMNT"] },
-  { seed: 41, title: "Canadian defender Bombito set for second surgery on left tibia", sourceName: "Sportsnet Soccer", tagLabels: ["CanMNT"] },
-  { seed: 96, title: "Whitecaps sign Canadian U20 star Emrick Fotsing from Vancouver FC", sourceName: "AFTN", tagLabels: ["MLS", "British Columbia"] },
-  { seed: 158, title: "Mauro Eustaquio adamant Inter Toronto will make playoffs despite sitting 7th in CPL", sourceName: "Northern Tribune", tagLabels: ["CPL", "Ontario"] },
-  { seed: 203, title: "Olivia Smith predictions, Promise David to Brighton & Nathan Saliba to Villarreal", sourceName: "CBC Soccer", tagLabels: ["Women's", "CanWNT"] },
+  // Dark opaque logo (its own dark backing baked in) + a long source name.
+  { seed: 41, title: "Canadian defender Bombito set for second surgery on left tibia", sourceName: "Windsor Star Soccer", tagLabels: ["CanMNT"] },
+  // Transparent, non-square mark (odd negative space) — the plate's real test.
+  { seed: 96, title: "Whitecaps sign Canadian U20 star Emrick Fotsing from Vancouver FC", sourceName: "Northern Tribune", tagLabels: ["MLS", "British Columbia"] },
+  // The longest source name in the registry, paired with a dark opaque logo.
+  { seed: 158, title: "Mauro Eustaquio adamant Inter Toronto will make playoffs despite sitting 7th in CPL", sourceName: "Kingston Whig-Standard Soccer", tagLabels: ["CPL", "Ontario"] },
+  // Light opaque logo, long headline bucket.
+  { seed: 203, title: "Olivia Smith predictions, Promise David to Brighton & Nathan Saliba to Villarreal", sourceName: "Winnipeg Free Press Soccer", tagLabels: ["Women's", "CanWNT"] },
+  // Not in the logo manifest at all — the monogram fallback path.
   { seed: 274, title: "NSL week in review: Calgary brings out the Wild card and the Vancouver Rise shine", sourceName: "Le Devoir — Québec", tagLabels: ["NSL", "Québec"] },
 ];
 
