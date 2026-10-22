@@ -22,6 +22,7 @@ import { type Context, Resonate } from "jsr:@resonatehq/supabase@0.4.1";
 import Anthropic from "npm:@anthropic-ai/sdk@^0.111";
 import postgres from "npm:postgres@^3.4.5";
 import { XMLParser } from "npm:fast-xml-parser@^5.10.1";
+import { decodeEntities } from "./entities.mjs";
 
 const resonate = new Resonate();
 
@@ -285,13 +286,7 @@ function canonicalize(rawUrl: string): string {
 }
 
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#\d+;/g, "")
+  return decodeEntities(html.replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
 }
