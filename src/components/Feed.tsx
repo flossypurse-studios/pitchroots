@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { FeedItem } from "@/lib/db";
 import { tagBySlug } from "@/lib/tags";
+import { SourceLogo } from "./SourceLogo";
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
   month: "short",
@@ -62,7 +63,10 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
         {items.slice(0, visible).map((item) => (
           <li key={item.id} className="rounded-lg border border-line bg-card p-4">
             <div className="text-xs text-muted mb-1 flex items-center gap-2">
-              <span className="font-semibold uppercase tracking-wide">{item.source_name}</span>
+              <span className="flex items-center gap-1.5">
+                <SourceLogo name={item.source_name} />
+                <span className="font-semibold uppercase tracking-wide">{item.source_name}</span>
+              </span>
               <span>·</span>
               <time dateTime={new Date(item.published_at).toISOString()}>
                 {dateFmt.format(new Date(item.published_at))} MT
@@ -85,8 +89,9 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
                       href={o.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-semibold text-bark underline hover:text-pitch transition-colors"
+                      className="inline-flex items-center gap-1 align-middle font-semibold text-bark underline hover:text-pitch transition-colors"
                     >
+                      <SourceLogo name={o.name} size={14} />
                       {o.name}
                     </a>
                   </span>

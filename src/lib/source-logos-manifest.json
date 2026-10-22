@@ -1,0 +1,186 @@
+{
+  "Toronto Star Soccer": {
+    "key": "toronto-star-soccer",
+    "status": "ok",
+    "file": "/source-logos/toronto-star-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://bloximages.chicago2.vip.townnews.com/thestar.com/content/tncms/live/libraries/flex/components/torstar_core/resources/images/favicons/thestar/apple-icon-180x180.png?_dc=1791999258",
+    "originalSize": "180x180"
+  },
+  "Sportsnet Soccer": {
+    "key": "sportsnet-soccer",
+    "status": "ok",
+    "file": "/source-logos/sportsnet-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.sportsnet.ca/wp-content/themes/sportsnet-nhl/images/sn_logo_180x180_bg_white.png",
+    "originalSize": "180x180"
+  },
+  "Northern Tribune": {
+    "key": "northern-tribune",
+    "status": "ok",
+    "file": "/source-logos/northern-tribune.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://northerntribune.ca/wp-content/uploads/2019/04/cropped-nt_icon-180x180.png",
+    "originalSize": "180x180"
+  },
+  "League1 Ontario": {
+    "key": "league1-ontario",
+    "status": "ok",
+    "file": "/source-logos/league1-ontario.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://league1ontario.com/wp-content/uploads/fbrfg/apple-touch-icon.png",
+    "originalSize": "180x180"
+  },
+  "CBC Soccer": {
+    "key": "cbc-soccer",
+    "status": "ok",
+    "file": "/source-logos/cbc-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.cbc.ca/a/apple-touch-icon.png",
+    "originalSize": "180x180"
+  },
+  "Alberta Soccer": {
+    "key": "alberta-soccer",
+    "status": "ok",
+    "file": "/source-logos/alberta-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://albertasoccer.com/wp-content/uploads/2024/04/Alberta-Soccer-favicon-300x300.png",
+    "originalSize": "300x300"
+  },
+  "Soccer Nova Scotia": {
+    "key": "soccer-nova-scotia",
+    "status": "ok",
+    "file": "/source-logos/soccer-nova-scotia.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://soccerns.ca/wp-content/uploads/2025/07/cropped-SNS-Prez-Logo.png",
+    "originalSize": "512x512"
+  },
+  "Daily Hive Offside": {
+    "key": "daily-hive-offside",
+    "status": "ok",
+    "file": "/source-logos/daily-hive-offside.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://dh-production-baselayer-static.dailyhive.com/assets/2.3.20/static/icons/apple-touch-icon.png",
+    "originalSize": "180x180"
+  },
+  "Canada Soccer": {
+    "key": "canada-soccer",
+    "status": "ok",
+    "file": "/source-logos/canada-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://cdn.uc.assets.prezly.com/d7fc1a75-7876-4f74-999a-4d1fb3e49d46/-/crop/1120x1168/284,0/-/preview/-/preview/180x180/Canada%20Soccer%20Logo.png",
+    "originalSize": "173x180"
+  },
+  "TrueNorthFoot": {
+    "key": "truenorthfoot",
+    "status": "ok",
+    "file": "/source-logos/truenorthfoot.png",
+    "picked": "rel=icon",
+    "sourceUrl": "https://truenorthfoot.ca/favicon.png",
+    "originalSize": "144x144"
+  },
+  "The Third Sub": {
+    "key": "the-third-sub",
+    "status": "ok",
+    "file": "/source-logos/the-third-sub.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://i0.wp.com/thethirdsub.ca/wp-content/uploads/2023/03/cropped-TTS-Logo-2023-PNG.png?fit=180%2C180&#038;ssl=1",
+    "originalSize": "180x180"
+  },
+  "AFTN": {
+    "key": "aftn",
+    "status": "ok",
+    "file": "/source-logos/aftn.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.aftn.ca/wp-content/uploads/fbrfg/apple-touch-icon.png",
+    "originalSize": "180x180"
+  },
+  "Waking The Red": {
+    "key": "waking-the-red",
+    "status": "ok",
+    "file": "/source-logos/waking-the-red.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://cdn.readeverything.co/wp-content/uploads/sites/118/2023/04/Waking-The-Red-LOGO-Alt-300x300.png",
+    "originalSize": "300x300"
+  },
+  "Edmonton Journal Soccer": {
+    "key": "edmonton-journal-soccer",
+    "status": "ok",
+    "file": "/source-logos/edmonton-journal-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://dcs-static.gprod.postmedia.digital/22.3.1/websites/images/apple-touch-icons/iphone-retina/icon-ej.png",
+    "originalSize": "180x180"
+  },
+  "Calgary Herald Soccer": {
+    "key": "calgary-herald-soccer",
+    "status": "ok",
+    "file": "/source-logos/calgary-herald-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://dcs-static.gprod.postmedia.digital/22.3.1/websites/images/apple-touch-icons/iphone-retina/icon-ch.png",
+    "originalSize": "180x180"
+  },
+  "The Province Soccer": {
+    "key": "the-province-soccer",
+    "status": "ok",
+    "file": "/source-logos/the-province-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://dcs-static.gprod.postmedia.digital/22.3.1/websites/images/apple-touch-icons/iphone-retina/icon-vp.png",
+    "originalSize": "180x180"
+  },
+  "Toronto Sun Soccer": {
+    "key": "toronto-sun-soccer",
+    "status": "ok",
+    "file": "/source-logos/toronto-sun-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://dcs-static.gprod.postmedia.digital/22.3.1/websites/images/apple-touch-icons/iphone-retina/icon-tsun.png",
+    "originalSize": "180x180"
+  },
+  "Windsor Star Soccer": {
+    "key": "windsor-star-soccer",
+    "status": "ok",
+    "file": "/source-logos/windsor-star-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://windsorstar.com/wp-content/uploads/sites/10/2026/09/Windsor-Star-Icon-Background-512x512-1.png?w=180",
+    "originalSize": "180x180"
+  },
+  "Sudbury Star Soccer": {
+    "key": "sudbury-star-soccer",
+    "status": "ok",
+    "file": "/source-logos/sudbury-star-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.thesudburystar.com/wp-content/uploads/sites/12/2026/09/SudburyStar-Icon_Background_512x512.png?w=180",
+    "originalSize": "180x180"
+  },
+  "Sault Star Soccer": {
+    "key": "sault-star-soccer",
+    "status": "ok",
+    "file": "/source-logos/sault-star-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.saultstar.com/wp-content/uploads/sites/13/2026/09/SaultStar-icon-background-512x512-1.png?w=180",
+    "originalSize": "180x180"
+  },
+  "Kingston Whig-Standard Soccer": {
+    "key": "kingston-whig-standard-soccer",
+    "status": "ok",
+    "file": "/source-logos/kingston-whig-standard-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.thewhig.com/wp-content/uploads/sites/5/2026/08/Kingston-Whig-Standard-ICON-background-512x512-1.png?w=180",
+    "originalSize": "180x180"
+  },
+  "Globe and Mail Soccer": {
+    "key": "globe-and-mail-soccer",
+    "status": "ok",
+    "file": "/source-logos/globe-and-mail-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.theglobeandmail.com/pf/resources/assets/meta/apple-touch-icon.png?d=981",
+    "originalSize": "180x180"
+  },
+  "Winnipeg Free Press Soccer": {
+    "key": "winnipeg-free-press-soccer",
+    "status": "ok",
+    "file": "/source-logos/winnipeg-free-press-soccer.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.winnipegfreepress.com/wp-content/uploads/sites/2/2023/06/cropped-FP-site-icon-1.png?w=180",
+    "originalSize": "180x180"
+  }
+}
