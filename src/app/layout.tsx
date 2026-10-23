@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Analytics } from "@/components/Analytics";
-import { CookieConsent } from "@/components/CookieConsent";
 import { NavPills } from "@/components/NavPills";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { gameCompetitionsPresent } from "@/lib/db";
@@ -191,10 +190,7 @@ export default async function RootLayout({
             </div>
           </div>
         </footer>
-        {/* Analytics renders nothing until the reader accepts; the banner shows
-            itself only while the choice is still unmade. */}
         <Analytics />
-        <CookieConsent />
       </body>
     </html>
   );
