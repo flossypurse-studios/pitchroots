@@ -113,5 +113,10 @@
     "key": "aftn",
     "status": "ok",
     "file": "/source-logos-256/aftn.png"
+  },
+  "CanPL": {
+    "key": "canpl",
+    "status": "ok",
+    "file": "/source-logos-256/canpl.png"
   }
 }

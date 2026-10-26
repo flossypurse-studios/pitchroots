@@ -182,5 +182,13 @@
     "picked": "apple-touch-icon",
     "sourceUrl": "https://www.winnipegfreepress.com/wp-content/uploads/sites/2/2023/06/cropped-FP-site-icon-1.png?w=180",
     "originalSize": "180x180"
+  },
+  "CanPL": {
+    "key": "canpl",
+    "status": "ok",
+    "file": "/source-logos/canpl.png",
+    "picked": "apple-touch-icon",
+    "sourceUrl": "https://www.cplsoccer.com/favicon/favicon.svg",
+    "originalSize": "243x320"
   }
 }
