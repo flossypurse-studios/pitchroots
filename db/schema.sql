@@ -389,6 +389,27 @@ $$;
 revoke all on function public.pipeline_freshness() from public, authenticated;
 grant execute on function public.pipeline_freshness() to anon;
 
+-- 2026-10-26 ── source connectors: the first non-RSS source (CanPL).
+--
+-- DEPLOY THE MATCHING POLL BUILD FIRST, then apply this. The new build reads a
+-- missing `connector` as 'rss'; an older build would read the CanPL row as RSS and
+-- parse its JSON to zero items. Same statements as
+-- db/migrations/2026-10-26-canpl-forge-connector.sql, which records the
+-- robots.txt/terms check.
+
+-- Which parser reads feed_url: 'rss' (fetchFeed) or a key of CONNECTORS in
+-- supabase/functions/poll/connectors.mjs. A connector that parses zero items
+-- throws, so it fails like an HTTP error instead of counting as an empty feed.
+alter table sources add column if not exists connector text not null default 'rss';
+alter table sources drop constraint if exists sources_connector_check;
+alter table sources add constraint sources_connector_check check (connector in ('rss', 'forge'));
+
+-- canpl.ca 302s to www.cplsoccer.com, whose pages render from this Forge content
+-- API. Articles live at <home_url>/news/<slug>.
+insert into sources (name, feed_url, home_url, tier, media_gate, ua_override, connector) values
+  ('CanPL', 'https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=30', 'https://www.cplsoccer.com', 'pro-league', false, null, 'forge')
+on conflict (feed_url) do nothing;
+
 -- ---------------------------------------------------------------------------
 -- Lockdown: keep this schema off the public Data API.
 --

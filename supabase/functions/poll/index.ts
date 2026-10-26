@@ -23,6 +23,7 @@ import Anthropic from "npm:@anthropic-ai/sdk@^0.111";
 import postgres from "npm:postgres@^3.4.5";
 import { XMLParser } from "npm:fast-xml-parser@^5.10.1";
 import { decodeEntities } from "./entities.mjs";
+import { CONNECTORS } from "./connectors.mjs";
 
 const resonate = new Resonate();
 
@@ -98,6 +99,9 @@ type SourceRow = {
   ua_override: string | null;
   link_rewrite_from: string | null;
   link_rewrite_to: string | null;
+  // 'rss' (the default) or a key of CONNECTORS in connectors.mjs. Optional so a
+  // build deployed before the column exists still reads every row as RSS.
+  connector?: string | null;
 };
 
 type Candidate = {
@@ -372,6 +376,34 @@ async function fetchFeed(source: SourceRow): Promise<Candidate[]> {
     });
   }
   return out;
+}
+
+// Read one source, whatever kind it is. RSS goes through fetchFeed; every other
+// kind fetches feed_url with the same User-Agent, timeout and redirect handling,
+// and hands the body to its parser in connectors.mjs. A parser throws on zero
+// usable items, so a page connector that finds nothing fails like an HTTP error
+// (retried, then markSourceFail) instead of resolving as a quiet success.
+type Connector = {
+  accept: string;
+  parse: (body: string, homeUrl: string) => Omit<Candidate, "canonicalUrl">[];
+};
+
+async function fetchSource(source: SourceRow): Promise<Candidate[]> {
+  const kind = source.connector ?? "rss";
+  if (kind === "rss") return await fetchFeed(source);
+  const connector = (CONNECTORS as Record<string, Connector>)[kind];
+  if (!connector) throw new Error(`source.unknownConnector: ${kind}`);
+  const res = await fetch(source.feed_url, {
+    headers: {
+      "User-Agent": source.ua_override ?? DEFAULT_UA,
+      Accept: connector.accept,
+    },
+    signal: AbortSignal.timeout(15_000),
+    redirect: "follow",
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const items = connector.parse(await res.text(), source.home_url);
+  return items.map((c) => ({ ...c, canonicalUrl: canonicalize(c.url) }));
 }
 
 // A link must resolve before we publish it. Applies the source's rewrite rule,
@@ -681,7 +713,7 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      entries = (await ctx.run(() => fetchFeed(source))) as Candidate[];
+      entries = (await ctx.run(() => fetchSource(source))) as Candidate[];
       break;
     } catch (err) {
       lastErr = err;
@@ -1117,7 +1149,7 @@ resonate.register(
         // Reachable, parseable, AND actually carrying items — a feed parked for
         // serving empty 200s would otherwise be revived on the very next recheck,
         // since fetching it succeeds every time.
-        const entries = (await ctx.run(() => fetchFeed(source))) as Candidate[];
+        const entries = (await ctx.run(() => fetchSource(source))) as Candidate[];
         if (entries.length === 0) continue;
         await ctx.run(() => reviveSource(source.id));
         healed++;

@@ -34,4 +34,8 @@ export const SOURCES = [
   { id: 47, name: "Globe and Mail Soccer", home_url: "https://www.theglobeandmail.com/sports/soccer/", active: true, retired: false, ua_override: null },
   { id: 48, name: "Winnipeg Free Press Soccer", home_url: "https://www.winnipegfreepress.com/sports/soccer/", active: false, retired: true, ua_override: null },
   { id: 49, name: "Toronto Star Soccer", home_url: "https://www.thestar.com/sports/soccer/", active: false, retired: true, ua_override: null },
+  // Added 2026-10-26 by db/migrations/2026-10-26-canpl-forge-connector.sql, which is
+  // NOT applied yet: id is null until it is, then copy in the id the insert assigned.
+  // Read through the `forge` connector (JSON API), not RSS.
+  { id: null, name: "CanPL", home_url: "https://www.cplsoccer.com", active: true, retired: false, ua_override: null },
 ];
