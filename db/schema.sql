@@ -404,10 +404,18 @@ alter table sources add column if not exists connector text not null default 'rs
 alter table sources drop constraint if exists sources_connector_check;
 alter table sources add constraint sources_connector_check check (connector in ('rss', 'forge'));
 
+-- Items published before not_before are never ingested, so never mirrored
+-- (poll/freshness.mjs). NULL, the default, changes nothing for any existing
+-- source. A newly added source sets it to now() - 48h on insert so its first run
+-- takes only the last two days of stories, not its archive (SPEC §8.4: never a
+-- backfill). It is a fixed instant, not a max age: once it is older than the
+-- 7-day window it no longer filters anything.
+alter table sources add column if not exists not_before timestamptz;
+
 -- canpl.ca 302s to www.cplsoccer.com, whose pages render from this Forge content
 -- API. Articles live at <home_url>/news/<slug>.
-insert into sources (name, feed_url, home_url, tier, media_gate, ua_override, connector) values
-  ('CanPL', 'https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=30', 'https://www.cplsoccer.com', 'pro-league', false, null, 'forge')
+insert into sources (name, feed_url, home_url, tier, media_gate, ua_override, connector, not_before) values
+  ('CanPL', 'https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=30', 'https://www.cplsoccer.com', 'pro-league', false, null, 'forge', now() - interval '48 hours')
 on conflict (feed_url) do nothing;
 
 -- ---------------------------------------------------------------------------

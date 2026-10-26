@@ -24,6 +24,7 @@ import postgres from "npm:postgres@^3.4.5";
 import { XMLParser } from "npm:fast-xml-parser@^5.10.1";
 import { decodeEntities } from "./entities.mjs";
 import { CONNECTORS } from "./connectors.mjs";
+import { freshEntries } from "./freshness.mjs";
 
 const resonate = new Resonate();
 
@@ -102,6 +103,10 @@ type SourceRow = {
   // 'rss' (the default) or a key of CONNECTORS in connectors.mjs. Optional so a
   // build deployed before the column exists still reads every row as RSS.
   connector?: string | null;
+  // Items published before this are never ingested (freshness.mjs). Set only on a
+  // newly added source, to keep its first run from backfilling. Optional for the
+  // same reason as `connector`.
+  not_before?: string | Date | null;
 };
 
 type Candidate = {
@@ -731,8 +736,9 @@ resonate.register("ingestSource", async function ingestSource(ctx: Context, sour
   // boundary regardless of when a resumed worker wakes (control flow must depend
   // only on checkpointed values, never on live wall-clock time).
   const now = (await ctx.run(() => Date.now())) as number;
-  const cutoff = now - MAX_ITEM_AGE_DAYS * 86_400_000;
-  const fresh = entries.filter((e) => Date.parse(e.publishedAt) >= cutoff);
+  // A new source's not_before (set by its migration) keeps its first run to the
+  // last 48h; null for every other source. See freshness.mjs.
+  const fresh = freshEntries(entries, now, MAX_ITEM_AGE_DAYS, source.not_before ?? null) as Candidate[];
   stats.fetched = fresh.length;
 
   let taken = 0;

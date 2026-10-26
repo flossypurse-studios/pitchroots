@@ -13,6 +13,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseForgeStories, CONNECTORS } from "../supabase/functions/poll/connectors.mjs";
+import { freshEntries } from "../supabase/functions/poll/freshness.mjs";
 
 const HOME = "https://www.cplsoccer.com";
 const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -82,6 +83,44 @@ assert.equal(decoded.snippet, "Line one. Line two.");
 // No summary → the standfirst stands in; long text is cut at 600.
 assert.equal(parseForgeStories(JSON.stringify({ items: [story({ summary: "", headline: "Standfirst" })] }), HOME)[0].snippet, "Standfirst");
 assert.equal(parseForgeStories(JSON.stringify({ items: [story({ summary: "x".repeat(900) })] }), HOME)[0].snippet.length, 600);
+
+// ── first-run cutoff (freshness.mjs) ──────────────────────────────────────────
+// Fixed clock: the fixture's newest story is 2026-10-26T13:51Z.
+const NOW = Date.parse("2026-10-26T18:00:00.000Z");
+const H = 3_600_000;
+const NB = new Date(NOW - 48 * H); // what the migration's now() - 48h stores
+const at = (iso) => ({ guid: iso, url: `${HOME}/news/x`, title: "t", snippet: "s", publishedAt: iso });
+const old = at("2026-10-23T12:00:00.000Z");      // 3 days old: inside 7d, before not_before
+const recent = at("2026-10-26T09:00:00.000Z");   // 9h old
+const edge = at(NB.toISOString());               // exactly on the cutoff: kept (>=)
+const ancient = at("2026-10-10T00:00:00.000Z");  // older than the 7-day window
+const pick = (xs, nb) => freshEntries(xs, NOW, 7, nb).map((e) => e.publishedAt);
+
+// Old item skipped, recent kept, the boundary is inclusive.
+assert.deepEqual(pick([recent, old, edge, ancient], NB), [recent.publishedAt, edge.publishedAt]);
+// Replay-safe: the same instant read back from a checkpoint as an ISO string
+// (or as postgres's text form) filters identically to the Date object.
+assert.deepEqual(pick([recent, old, edge, ancient], NB.toISOString()), pick([recent, old, edge, ancient], NB));
+assert.deepEqual(pick([recent, old], "2026-10-24 18:00:00+00"), [recent.publishedAt]);
+// No cutoff (null/undefined, i.e. every RSS source) = exactly the old 7-day filter.
+const oldBehaviour = (xs) => xs.filter((e) => Date.parse(e.publishedAt) >= NOW - 7 * 86_400_000);
+for (const nb of [null, undefined]) {
+  assert.deepEqual(pick([recent, old, edge, ancient], nb), oldBehaviour([recent, old, edge, ancient]).map((e) => e.publishedAt));
+}
+assert.deepEqual(pick([old], null), [old.publishedAt]);
+// Not a permanent 48h max age: a week later (e.g. after a 3-day outage), a
+// 3-day-old story is kept, because not_before is far behind the 7-day window.
+assert.deepEqual(freshEntries([at("2026-10-30T18:00:00.000Z")], NOW + 7 * 24 * H, 7, NB).length, 1);
+// A not_before older than the window never widens it.
+assert.deepEqual(pick([ancient], new Date("2026-01-01T00:00:00Z")), []);
+// Garbage is loud, not silently ignored.
+assert.throws(() => freshEntries([recent], NOW, 7, "not a date"), /source\.badNotBefore/);
+// The real CanPL response (6 stories, 10-25 19:43Z → 10-26 13:51Z): all six are
+// inside 48h of NOW, and a cutoff landing mid-list keeps the newer four, in order.
+const real = parseForgeStories(fixture("canpl-forge-stories-2026-10-26.json"), HOME);
+assert.equal(freshEntries(real, NOW, 7, NB).length, 6);
+assert.deepEqual(freshEntries(real, NOW, 7, "2026-10-25T22:15:00Z"), real.slice(0, 4));
+assert.equal(freshEntries(real, NOW, 7, null).length, 6);
 
 // ── registry ─────────────────────────────────────────────────────────────────
 assert.equal(CONNECTORS.forge.parse, parseForgeStories);
