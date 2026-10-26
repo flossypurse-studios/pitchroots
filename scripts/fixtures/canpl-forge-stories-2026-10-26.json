@@ -1,1 +1,77 @@
-{"pagination":{"nextUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=6&$skip=6","maxItems":100},"meta":{"apiVersion":"2.0","generatedAt":"2026-10-26T14:41:15.9890384Z"},"items":[{"type":"story","_translationId":"b535b883-ca15-48c0-aa13-d9fc96e1bb5a","_entityId":"c03afed7-8a5d-463b-9fc3-ff79faea4451","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/table-never-lies-cavalry-claim-2026-cpl-shield-after-remarkable-season","slug":"table-never-lies-cavalry-claim-2026-cpl-shield-after-remarkable-season","title":" 'Table never lies': Cavalry claim 2026 CPL Shield after remarkable season","tags":[{"_translationId":"67d6f676-c068-4b5f-9d6d-21f81b3d68ce","_entityId":"d5206001-f3d6-416b-8e90-886b42f055c9","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/league","title":"League","slug":"league","neutralSlug":"league","externalSourceReference":{},"fields":{}}],"fields":{"tenant":"league","author":"Mitchell Tierney"},"createdBy":"Mitchell Tierney","lastUpdatedBy":"Charlie O'Connor-Clarke","lastUpdatedDate":"2026-10-26T13:51:14.023Z","contentDate":"2026-10-26T13:51:14.023Z","featured":0,"headline":"The Cavs got their deserved moment after a record-breaking season","summary":"Tommy Wheeldon Jr. raised his voice over the roar of the crowd at ATCO Field, effusively praising his team.\nHe stood on the stadium's partially frozen grass, speaking to OneSoccer's Kristian Jack, surrounded by scenes of jubilation. Wheeldon Jr.'s Cavalry FC had just claimed the CPL Shield as the league's","thumbnail":{"title":"_CavsDBowdige-30 (1)","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/zgf5oewizl384t6lwykq","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/zgf5oewizl384t6lwykq","format":"jpg","overriddenFormats":{},"slug":"cavsdbowdige-30-1","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/cavsdbowdige-30-1"}},{"type":"story","_translationId":"b522987a-fbf1-4050-8f0a-879fe5d79a6a","_entityId":"4e2d20c6-55ef-44c7-a083-fd640ba85da8","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/inter-toronto-end-season-with-win-over-atletico-ottawa-highlights","slug":"inter-toronto-end-season-with-win-over-atletico-ottawa-highlights","title":"Inter Toronto end season with win over Atlético Ottawa | HIGHLIGHTS","tags":[{"_translationId":"67d6f676-c068-4b5f-9d6d-21f81b3d68ce","_entityId":"d5206001-f3d6-416b-8e90-886b42f055c9","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/league","title":"League","slug":"league","neutralSlug":"league","externalSourceReference":{},"fields":{}}],"fields":{"tenant":"league"},"createdBy":"Charlie O'Connor-Clarke","lastUpdatedBy":"Charlie O'Connor-Clarke","lastUpdatedDate":"2026-10-26T00:11:21.381Z","contentDate":"2026-10-26T00:11:21.381Z","featured":0,"summary":"Inter Toronto brought their 2026 Canadian Premier League campaign to a close on Sunday, as they defeated Atlético Ottawa 2-1 at York Lions Stadium.\nOttawa, who were already guaranteed to finish third in the table, will move on swiftly from the defeat because they'll play Forge FC in the CPL","thumbnail":{"title":"261025-ITOvsATO-LBK-0068","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/vcdv9n2efv6pojj5p16g","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/vcdv9n2efv6pojj5p16g","format":"jpg","overriddenFormats":{},"slug":"261025-itovsato-lbk-0068","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/261025-itovsato-lbk-0068"}},{"type":"story","_translationId":"69d4b2a9-76b6-4583-8204-d75ba580b6f8","_entityId":"8cc2c293-76bf-4304-ba24-df4d4e02939f","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/fc-supra-s-loic-kwemi-wins-2026-cpl-golden-boot","slug":"fc-supra-s-loic-kwemi-wins-2026-cpl-golden-boot","title":"FC Supra's Loïc Kwemi wins 2026 CPL Golden Boot","tags":[],"fields":{},"createdBy":"Charlie O'Connor-Clarke","lastUpdatedBy":"Charlie O'Connor-Clarke","lastUpdatedDate":"2026-10-25T23:38:58.262Z","contentDate":"2026-10-25T23:38:58.262Z","featured":0,"headline":"The Supra forward potted 15 goals in the regular season.","summary":"Sunday’s final round of matches saw FC Supra du Québec striker Loïc Kwemi officially claim the 2026 CPL Golden Boot award, capping a remarkable individual campaign in the club’s inaugural season.\nKwemi finished the Regular Season with 15 goals, which ranks as the second-highest single-season total in CPL history, behind","thumbnail":{"title":"TSZ333","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/ak7mqjjqmx89qppt24gr","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/ak7mqjjqmx89qppt24gr","format":"jpg","overriddenFormats":{},"slug":"tsz333","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/tsz333"}},{"type":"story","_translationId":"0e3a8cb6-c3e0-4328-b7fb-b4ae6be9ef8e","_entityId":"8b019340-dec3-4aed-b4d8-c0c7b777b0ce","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/cavalry-lift-cpl-shield-as-2026-regular-season-winners-highlights","slug":"cavalry-lift-cpl-shield-as-2026-regular-season-winners-highlights","title":"Cavalry lift CPL Shield as 2026 regular season winners | HIGHLIGHTS","tags":[{"_translationId":"67d6f676-c068-4b5f-9d6d-21f81b3d68ce","_entityId":"d5206001-f3d6-416b-8e90-886b42f055c9","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/league","title":"League","slug":"league","neutralSlug":"league","externalSourceReference":{},"fields":{}}],"fields":{"author":"Mitchell Tierney","tenant":"league"},"createdBy":"Mitchell Tierney","lastUpdatedBy":"Mitchell Tierney","lastUpdatedDate":"2026-10-25T23:36:55.711Z","contentDate":"2026-10-25T22:15:31.357Z","featured":0,"headline":"The Cavs top the CPL table for a third time ","summary":"Cavalry FC are the Canadian Premier League's 2026 regular season winners.\nThey took care of business at ATCO Field on the final day of the season, defeating Vancouver FC 1-0 on a goal from Ali Musse to lift the 2026 CPL Shield on home field.\nLeading the league for the","thumbnail":{"title":"MSCAV-VAN-1845","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/xr8nffy8hcix51c2cacx","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/xr8nffy8hcix51c2cacx","format":"jpg","overriddenFormats":{},"slug":"mscav-van-1845-x4930","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/mscav-van-1845-x4930"}},{"type":"story","_translationId":"c9d348b5-4851-4a57-b555-4e6acbcbca08","_entityId":"b40c487b-097d-4c8a-be13-053a29b7006f","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/fc-supra-du-quebec-clinch-playoff-berth-in-inaugural-season","slug":"fc-supra-du-quebec-clinch-playoff-berth-in-inaugural-season","title":"FC Supra du Québec clinch playoff berth in inaugural season","tags":[{"_translationId":"67d6f676-c068-4b5f-9d6d-21f81b3d68ce","_entityId":"d5206001-f3d6-416b-8e90-886b42f055c9","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/league","title":"League","slug":"league","neutralSlug":"league","externalSourceReference":{},"fields":{}}],"fields":{"tenant":"league","author":"Charlie O'Connor-Clarke"},"createdBy":"Charlie O'Connor-Clarke","lastUpdatedBy":"Charlie O'Connor-Clarke","lastUpdatedDate":"2026-10-26T14:34:01.984Z","contentDate":"2026-10-25T22:13:59.953Z","featured":0,"headline":"The CPL's newest club is postseason-bound.","summary":"FC Supra du Québec have clinched a berth in the 2026 Canadian Premier League Playoffs after jumping ahead of Vancouver FC to seize fourth place on the final day of the regular season.\nSupra defeated the Halifax Wanderers 4-3 in Nova Scotia on Sunday, while Vancouver lost 1-0 at ATCO","thumbnail":{"title":"Halifax vs Supra Oct 25, 2026-63","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/y7wusrm3g5dqdkpdfmap","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/y7wusrm3g5dqdkpdfmap","format":"jpg","overriddenFormats":{},"slug":"halifax-vs-supra-oct-25-2026-63","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/halifax-vs-supra-oct-25-2026-63"}},{"type":"story","_translationId":"a52d7ac5-8bec-4b93-ba30-c1e872e1e9f3","_entityId":"978b23e6-2b62-4848-be70-0fbb8170dc2a","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/pacific-find-a-comeback-draw-against-forge-to-close-out-campaign-highlights","slug":"pacific-find-a-comeback-draw-against-forge-to-close-out-campaign-highlights","title":"Pacific find a comeback draw against Forge to close out campaign | HIGHLIGHTS","tags":[],"fields":{"author":"Alexandre Gangue-Ruzic"},"createdBy":"Alexandre Gangue-Ruzic","lastUpdatedBy":"Alexandre Gangue-Ruzic","lastUpdatedDate":"2026-10-26T00:53:48.189Z","contentDate":"2026-10-25T19:43:00Z","featured":0,"headline":"Pacific rescued a draw against Forge to end the season on a high note in front of their fans. ","summary":"Days after their special Canadian Championship triumph, Forge just missed out on another trophy on Sunday, as they drew 1-1 with Pacific at Royal Athletic Park to finish the regular season in second place, missing out on the CPL Shield to Cavalry by two points.\nWith Cavalry beating Vancouver FC","thumbnail":{"title":"PACvsFOR-21","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/o53snxhj8sk9qosuymjt","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/o53snxhj8sk9qosuymjt","format":"jpg","overriddenFormats":{},"slug":"pacvsfor-21","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/pacvsfor-21"}}]}
+{
+ "pagination": {
+  "nextUrl": "https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=6&$skip=6",
+  "maxItems": 100
+ },
+ "items": [
+  {
+   "type": "story",
+   "slug": "table-never-lies-cavalry-claim-2026-cpl-shield-after-remarkable-season",
+   "title": " 'Table never lies': Cavalry claim 2026 CPL Shield after remarkable season",
+   "headline": "The Cavs got their deserved moment after a record-breaking season",
+   "summary": "Tommy Wheeldon Jr. raised his voice over the roar of the crowd at ATCO Field, effusively praising his team.\nHe stood on the stadium's partially frozen grass, speaking to OneSoccer's Kristian Jack, surrounded by scenes of jubilation. Wheeldon Jr.'s Cavalry FC had just claimed the CPL Shield as the league's",
+   "contentDate": "2026-10-26T13:51:14.023Z",
+   "tags": [
+    {
+     "slug": "league"
+    }
+   ]
+  },
+  {
+   "type": "story",
+   "slug": "inter-toronto-end-season-with-win-over-atletico-ottawa-highlights",
+   "title": "Inter Toronto end season with win over Atlético Ottawa | HIGHLIGHTS",
+   "summary": "Inter Toronto brought their 2026 Canadian Premier League campaign to a close on Sunday, as they defeated Atlético Ottawa 2-1 at York Lions Stadium.\nOttawa, who were already guaranteed to finish third in the table, will move on swiftly from the defeat because they'll play Forge FC in the CPL",
+   "contentDate": "2026-10-26T00:11:21.381Z",
+   "tags": [
+    {
+     "slug": "league"
+    }
+   ]
+  },
+  {
+   "type": "story",
+   "slug": "fc-supra-s-loic-kwemi-wins-2026-cpl-golden-boot",
+   "title": "FC Supra's Loïc Kwemi wins 2026 CPL Golden Boot",
+   "headline": "The Supra forward potted 15 goals in the regular season.",
+   "summary": "Sunday’s final round of matches saw FC Supra du Québec striker Loïc Kwemi officially claim the 2026 CPL Golden Boot award, capping a remarkable individual campaign in the club’s inaugural season.\nKwemi finished the Regular Season with 15 goals, which ranks as the second-highest single-season total in CPL history, behind",
+   "contentDate": "2026-10-25T23:38:58.262Z",
+   "tags": []
+  },
+  {
+   "type": "story",
+   "slug": "cavalry-lift-cpl-shield-as-2026-regular-season-winners-highlights",
+   "title": "Cavalry lift CPL Shield as 2026 regular season winners | HIGHLIGHTS",
+   "headline": "The Cavs top the CPL table for a third time ",
+   "summary": "Cavalry FC are the Canadian Premier League's 2026 regular season winners.\nThey took care of business at ATCO Field on the final day of the season, defeating Vancouver FC 1-0 on a goal from Ali Musse to lift the 2026 CPL Shield on home field.\nLeading the league for the",
+   "contentDate": "2026-10-25T22:15:31.357Z",
+   "tags": [
+    {
+     "slug": "league"
+    }
+   ]
+  },
+  {
+   "type": "story",
+   "slug": "fc-supra-du-quebec-clinch-playoff-berth-in-inaugural-season",
+   "title": "FC Supra du Québec clinch playoff berth in inaugural season",
+   "headline": "The CPL's newest club is postseason-bound.",
+   "summary": "FC Supra du Québec have clinched a berth in the 2026 Canadian Premier League Playoffs after jumping ahead of Vancouver FC to seize fourth place on the final day of the regular season.\nSupra defeated the Halifax Wanderers 4-3 in Nova Scotia on Sunday, while Vancouver lost 1-0 at ATCO",
+   "contentDate": "2026-10-25T22:13:59.953Z",
+   "tags": [
+    {
+     "slug": "league"
+    }
+   ]
+  },
+  {
+   "type": "story",
+   "slug": "pacific-find-a-comeback-draw-against-forge-to-close-out-campaign-highlights",
+   "title": "Pacific find a comeback draw against Forge to close out campaign | HIGHLIGHTS",
+   "headline": "Pacific rescued a draw against Forge to end the season on a high note in front of their fans. ",
+   "summary": "Days after their special Canadian Championship triumph, Forge just missed out on another trophy on Sunday, as they drew 1-1 with Pacific at Royal Athletic Park to finish the regular season in second place, missing out on the CPL Shield to Cavalry by two points.\nWith Cavalry beating Vancouver FC",
+   "contentDate": "2026-10-25T19:43:00Z",
+   "tags": []
+  }
+ ]
+}

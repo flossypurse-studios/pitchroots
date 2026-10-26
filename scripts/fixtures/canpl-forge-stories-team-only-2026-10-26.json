@@ -1,1 +1,58 @@
-{"pagination":{"nextUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=3&$skip=20","previousUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=3&$skip=14","maxItems":100},"meta":{"apiVersion":"2.0","generatedAt":"2026-10-26T14:41:21.8014875Z"},"items":[{"type":"story","_translationId":"5c7ff25f-5a38-430d-9578-b0f828b1eea6","_entityId":"15612194-b242-4937-929e-e9a758495a70","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/pacific-fc-captain-josh-heard-announces-retirement","slug":"pacific-fc-captain-josh-heard-announces-retirement","title":"Pacific FC captain Josh Heard announces retirement","tags":[],"fields":{"author":"Charlie O'Connor-Clarke"},"createdBy":"Charlie O'Connor-Clarke","lastUpdatedBy":"Charlie O'Connor-Clarke","lastUpdatedDate":"2026-10-24T17:38:24.668Z","contentDate":"2026-10-21T17:05:13.64Z","featured":0,"headline":"Heard will be recognized by the club at their final regular season match.","summary":"Pacific FC captain Josh Heard announced on Wednesday that he will retire from professional soccer after this Sunday's final game in the Canadian Premier League regular season.\nThe 31-year-old winger, born in Wales but raised on Vancouver Island, has been with the Tridents for the past seven years, captaining the","thumbnail":{"title":"PFC vs. Ottawa_5 (1)","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/ftzk0yj16dr4p8pnkzco","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/ftzk0yj16dr4p8pnkzco","format":"jpg","overriddenFormats":{},"slug":"pfc-vs-ottawa-5-1","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/pfc-vs-ottawa-5-1"}},{"type":"story","_translationId":"4ce2352c-ea43-4277-96eb-f183db957ccf","_entityId":"db7dc9f2-e228-4281-84a4-1f189fa53725","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/josh-heard-announces-retirement-after-six-seasons-with-pacific-fc","slug":"josh-heard-announces-retirement-after-six-seasons-with-pacific-fc","title":"Josh Heard announces retirement after six seasons with Pacific FC","tags":[{"_translationId":"6182dc00-9dbf-4a2a-ba22-75cfd0c3f7a8","_entityId":"6f466f19-7de8-46ba-a6bf-defb742a38da","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/team-only","title":"Team Only","slug":"team-only","neutralSlug":"team-only","externalSourceReference":{},"fields":{}}],"fields":{"tenant":"pacific-fc","author":"Mimi Lockhurst"},"createdBy":"Mimi Lockhurst","lastUpdatedBy":"Mimi Lockhurst","lastUpdatedDate":"2026-10-21T22:11:37.236Z","contentDate":"2026-10-21T16:49:56.283Z","featured":0,"summary":"After six seasons as a Trident, Pacific FC Captain Josh Heard has announced his retirement from professional football at the conclusion of the 2026 season.\nFor Heard, the journey has always been more about football. From a young player growing up on the Island to a CPL champion and club","thumbnail":{"title":"Josh Heard - Wide (1)","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/kq5aonolav28i6xyds2x","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/kq5aonolav28i6xyds2x","format":"png","overriddenFormats":{},"slug":"josh-heard-wide-1","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/josh-heard-wide-1"}},{"type":"story","_translationId":"0a651ee4-8d73-4fa1-9a5a-8cccf9c8fb1b","_entityId":"3d7648ba-81c5-4ece-a37e-abdceb71676c","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/stories/report-new-stadium-at-wanderers-grounds-would-add-114-7-million-in-economic-activity","slug":"report-new-stadium-at-wanderers-grounds-would-add-114-7-million-in-economic-activity","title":"Report: New stadium at Wanderers Grounds would add $114.7 million in economic activity","tags":[{"_translationId":"6182dc00-9dbf-4a2a-ba22-75cfd0c3f7a8","_entityId":"6f466f19-7de8-46ba-a6bf-defb742a38da","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/team-only","title":"Team Only","slug":"team-only","neutralSlug":"team-only","externalSourceReference":{},"fields":{}},{"_translationId":"b2b96e15-4040-41fa-b434-9cdd15a471d8","_entityId":"ad0da2cf-6bea-46df-9c14-8ca02893cc07","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/4552b8b370da48e881dd8408da645c5a","title":"HFX Wanderers","slug":"4552b8b370da48e881dd8408da645c5a","neutralSlug":"4552b8b370da48e881dd8408da645c5a","externalSourceName":"team","externalSourceReference":{"SourceId":"team-4552b8b370da48e881dd8408da645c5a","SourceName":"team"},"fields":{}},{"_translationId":"715ac6ef-133a-4511-8993-cc0f7821f43e","_entityId":"880072a2-2d7a-4ad3-bec1-575276663df4","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/hfx-wanderers","title":"HFX Wanderers","slug":"hfx-wanderers","neutralSlug":"hfx-wanderers","externalSourceReference":{},"fields":{}},{"_translationId":"6bead523-5d38-4738-bb15-8d7d0780ef75","_entityId":"b9a783ea-6da5-4f75-96d8-b5b2fd04f094","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/hfx-wanderers-fc","title":"HFX Wanderers FC","slug":"hfx-wanderers-fc","neutralSlug":"hfx-wanderers-fc","externalSourceReference":{},"fields":{}},{"_translationId":"46bce307-017e-4cfa-92ef-f73e8a18a9e0","_entityId":"aa8260d5-8797-4e10-aa16-af484469f837","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/hfx-wanderers-x1351","title":"HFX Wanderers","slug":"hfx-wanderers-x1351","neutralSlug":"hfx-wanderers-x1351","externalSourceReference":{},"fields":{}},{"_translationId":"2766415e-3bca-4420-8207-75907eeff886","_entityId":"804bdba1-05a0-4d68-8cee-3005160b7d63","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/tags/hfx-wanderers-fr","title":"HFX Wanderers","slug":"hfx-wanderers-fr","neutralSlug":"hfx-wanderers-fr","externalSourceReference":{},"fields":{}}],"fields":{"tenant":"hfx-wanderers-fc"},"createdBy":"Ryan Brandt","lastUpdatedBy":"Ryan Brandt","lastUpdatedDate":"2026-10-21T14:32:48.681Z","contentDate":"2026-10-21T13:55:10.335Z","featured":0,"headline":"Assessment conducted by ATN Strategies found that Halifax Wanderers FC has contributed $83.3 million to the local economy","summary":"A new stadium at the Wanderers Grounds would generate $114.7 million in total economic activity for Nova Scotia, adding to the $83.3 million in economic impact the Wanderers have already generated since the club’s first season. That’s according to an economic-impact assessment conducted by Halifax-based ATN Strategies.\nThe assessment found","thumbnail":{"title":"Website for Wanderers grounds","templateUrl":"https://images.cplsoccer.com/image/upload/{formatInstructions}/prd/qmvc5npiangw6mrxdexf","thumbnailUrl":"https://images.cplsoccer.com/image/upload/t_ratio1_1-size20-f_webp-c_fill/prd/qmvc5npiangw6mrxdexf","format":"png","overriddenFormats":{},"slug":"website-for-wanderers-grounds","selfUrl":"https://dapi.cplsoccer.com/v2/content/en-us/photos/website-for-wanderers-grounds"}}]}
+{
+ "pagination": {
+  "nextUrl": "https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=3&$skip=20",
+  "previousUrl": "https://dapi.cplsoccer.com/v2/content/en-us/stories?$limit=3&$skip=14",
+  "maxItems": 100
+ },
+ "items": [
+  {
+   "type": "story",
+   "slug": "pacific-fc-captain-josh-heard-announces-retirement",
+   "title": "Pacific FC captain Josh Heard announces retirement",
+   "headline": "Heard will be recognized by the club at their final regular season match.",
+   "summary": "Pacific FC captain Josh Heard announced on Wednesday that he will retire from professional soccer after this Sunday's final game in the Canadian Premier League regular season.\nThe 31-year-old winger, born in Wales but raised on Vancouver Island, has been with the Tridents for the past seven years, captaining the",
+   "contentDate": "2026-10-21T17:05:13.64Z",
+   "tags": []
+  },
+  {
+   "type": "story",
+   "slug": "josh-heard-announces-retirement-after-six-seasons-with-pacific-fc",
+   "title": "Josh Heard announces retirement after six seasons with Pacific FC",
+   "summary": "After six seasons as a Trident, Pacific FC Captain Josh Heard has announced his retirement from professional football at the conclusion of the 2026 season.\nFor Heard, the journey has always been more about football. From a young player growing up on the Island to a CPL champion and club",
+   "contentDate": "2026-10-21T16:49:56.283Z",
+   "tags": [
+    {
+     "slug": "team-only"
+    }
+   ]
+  },
+  {
+   "type": "story",
+   "slug": "report-new-stadium-at-wanderers-grounds-would-add-114-7-million-in-economic-activity",
+   "title": "Report: New stadium at Wanderers Grounds would add $114.7 million in economic activity",
+   "headline": "Assessment conducted by ATN Strategies found that Halifax Wanderers FC has contributed $83.3 million to the local economy",
+   "summary": "A new stadium at the Wanderers Grounds would generate $114.7 million in total economic activity for Nova Scotia, adding to the $83.3 million in economic impact the Wanderers have already generated since the club’s first season. That’s according to an economic-impact assessment conducted by Halifax-based ATN Strategies.\nThe assessment found",
+   "contentDate": "2026-10-21T13:55:10.335Z",
+   "tags": [
+    {
+     "slug": "team-only"
+    },
+    {
+     "slug": "4552b8b370da48e881dd8408da645c5a"
+    },
+    {
+     "slug": "hfx-wanderers"
+    },
+    {
+     "slug": "hfx-wanderers-fc"
+    },
+    {
+     "slug": "hfx-wanderers-x1351"
+    },
+    {
+     "slug": "hfx-wanderers-fr"
+    }
+   ]
+  }
+ ]
+}

@@ -6,6 +6,10 @@
 // 2026-10-26 with the poll function's own User-Agent:
 //   canpl-forge-stories-2026-10-26.json            stories?$limit=6
 //   canpl-forge-stories-team-only-2026-10-26.json  stories?$limit=3&$skip=17
+// Each item is cut down to the fields the parser reads (type, slug, title,
+// headline, summary, contentDate, tag slugs). The full response also names the
+// league's CMS editors and carries internal ids, which don't belong in a public
+// repo. Values are unedited.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseForgeStories, CONNECTORS } from "../supabase/functions/poll/connectors.mjs";
