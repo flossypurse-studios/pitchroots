@@ -164,7 +164,7 @@ export default async function RootLayout({
               <a href="mailto:hello@pitchroots.ca" className="hover:text-pitch">hello@pitchroots.ca</a>
               <span>Headlines and summaries link out to the original publishers.</span>
             </div>
-            <div className="pt-2 border-t border-line">
+            <div className="pt-2 border-t border-line flex flex-wrap items-center gap-x-4 gap-y-2">
               <a
                 href="https://flossypurse.studio"
                 className="inline-flex items-center gap-2 opacity-80 hover:opacity-100"
@@ -187,6 +187,8 @@ export default async function RootLayout({
                 </svg>
                 <span>A FlossyPurse Studios project</span>
               </a>
+              <a href="https://flossypurse.studio/privacy" className="opacity-80 hover:opacity-100">Privacy</a>
+              <a href="https://flossypurse.studio/terms" className="opacity-80 hover:opacity-100">Terms</a>
             </div>
           </div>
         </footer>
