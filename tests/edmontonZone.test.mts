@@ -39,3 +39,12 @@ test("GamesCalendar.tsx holds no raw America/Edmonton literal — only the impor
   const code = readFileSync(new URL("../src/components/GamesCalendar.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(code, /["']America\/Edmonton["']/);
 });
+
+test("GamesCalendar.tsx drops the zone name for the fixed UTC-6 zone", () => {
+  const code = readFileSync(new URL("../src/components/GamesCalendar.tsx", import.meta.url), "utf8");
+  assert.match(code, /fixed \? \{\} : \{ timeZoneName: "short"/);
+  // What that branch prints, for a Calgary kickoff after the cutover.
+  const label = new Intl.DateTimeFormat("en-CA", { hour: "numeric", minute: "2-digit", timeZone: edmontonZoneAt(Date.parse("2026-11-07T21:00:00Z")) })
+    .format(new Date("2026-11-07T21:00:00Z"));
+  assert.equal(`${label} local`, "3:00 p.m. local");
+});

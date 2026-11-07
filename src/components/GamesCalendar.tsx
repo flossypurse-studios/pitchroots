@@ -12,14 +12,19 @@ function venueZone(g: Game): string {
 
 // Kickoff renders in the venue's own timezone — a national calendar shows a
 // Halifax game in AT and a Vancouver game in PT, because that's when the gates
-// open for the person deciding whether to go.
+// open for the person deciding whether to go. An Alberta game from the UTC-6
+// cutover on says "local" instead of a zone name: the fixed zone would print
+// "GMT-6" and older tz data "MST", and both read wrong.
 function kickoffLabel(g: Game): string {
-  return new Intl.DateTimeFormat("en-CA", {
+  const zone = venueZone(g);
+  const fixed = g.timezone === EDMONTON && zone !== EDMONTON;
+  const time = new Intl.DateTimeFormat("en-CA", {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: venueZone(g),
-    timeZoneName: "short",
+    timeZone: zone,
+    ...(fixed ? {} : { timeZoneName: "short" as const }),
   }).format(new Date(g.kickoff_at));
+  return fixed ? `${time} local` : time;
 }
 
 const DAY_OPTS: Intl.DateTimeFormatOptions = {
