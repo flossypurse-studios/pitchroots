@@ -1,6 +1,14 @@
 import Link from "next/link";
 import type { Game } from "@/lib/db";
 import { tagBySlug } from "@/lib/tags";
+import { EDMONTON, edmontonZoneAt } from "@/lib/edmontonZone";
+
+// A venue's own IANA zone, corrected for Alberta's permanent-UTC-6 cutover —
+// see edmontonZone.ts. Every other venue's zone is returned unchanged.
+function venueZone(g: Game): string {
+  const tz = g.timezone ?? "UTC";
+  return tz === EDMONTON ? edmontonZoneAt(new Date(g.kickoff_at).getTime()) : tz;
+}
 
 // Kickoff renders in the venue's own timezone — a national calendar shows a
 // Halifax game in AT and a Vancouver game in PT, because that's when the gates
@@ -9,7 +17,7 @@ function kickoffLabel(g: Game): string {
   return new Intl.DateTimeFormat("en-CA", {
     hour: "numeric",
     minute: "2-digit",
-    timeZone: g.timezone ?? "UTC",
+    timeZone: venueZone(g),
     timeZoneName: "short",
   }).format(new Date(g.kickoff_at));
 }
@@ -23,7 +31,7 @@ const DAY_OPTS: Intl.DateTimeFormatOptions = {
 function dateKey(g: Game): string {
   return new Intl.DateTimeFormat("en-CA", {
     ...DAY_OPTS,
-    timeZone: g.timezone ?? "UTC",
+    timeZone: venueZone(g),
   }).format(new Date(g.kickoff_at));
 }
 
@@ -33,7 +41,7 @@ function monthKey(g: Game): string {
   return new Intl.DateTimeFormat("en-CA", {
     month: "long",
     year: "numeric",
-    timeZone: g.timezone ?? "UTC",
+    timeZone: venueZone(g),
   }).format(new Date(g.kickoff_at));
 }
 
@@ -45,7 +53,7 @@ function isToday(g: Game): boolean {
     dateKey(g) ===
     new Intl.DateTimeFormat("en-CA", {
       ...DAY_OPTS,
-      timeZone: g.timezone ?? "UTC",
+      timeZone: venueZone(g),
     }).format(new Date())
   );
 }

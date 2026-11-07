@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { FeedItem } from "@/lib/db";
 import { tagBySlug } from "@/lib/tags";
+import { edmontonFormat } from "@/lib/edmontonZone";
 import { SourceLogo } from "./SourceLogo";
 
-const dateFmt = new Intl.DateTimeFormat("en-CA", {
+const dateFmt = edmontonFormat("en-CA", {
   month: "short",
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
-  timeZone: "America/Edmonton",
 });
 
 // How many cards to show first, and how many to reveal per scroll. 10 fills a
@@ -69,7 +69,7 @@ export function Feed({ items, initial = INITIAL }: { items: FeedItem[]; initial?
               </span>
               <span>·</span>
               <time dateTime={new Date(item.published_at).toISOString()}>
-                {dateFmt.format(new Date(item.published_at))} MT
+                {dateFmt.format(new Date(item.published_at))}
               </time>
             </div>
             <a href={item.url} target="_blank" rel="noopener noreferrer">
