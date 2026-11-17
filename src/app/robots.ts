@@ -33,6 +33,8 @@ const BLOCKED_AI_AGENTS = [
   "Omgilibot",
   "Amazonbot",
   "img2dataset",
+  "FacebookBot",
+  "AI2Bot",
 ];
 
 export default function robots(): MetadataRoute.Robots {
