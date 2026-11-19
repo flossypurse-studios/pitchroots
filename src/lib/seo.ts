@@ -114,3 +114,43 @@ export function breadcrumbJsonLd(crumbs: Crumb[]) {
     })),
   };
 }
+
+/**
+ * Metadata for a shared-story link (`<feed page>?s=<id>`, #561). The preview a
+ * network draws is the story's own: its stored headline, its social card, and
+ * "via <Source> · PitchRoots". The canonical stays the plain feed page and the
+ * variant is noindex, so search engines see no new page per story. `og:url`
+ * is the shared URL itself: Facebook re-scrapes whatever og:url names, and
+ * pointing it at the plain page would swap the story's card for the site's.
+ */
+export function sharedStoryMetadata(opts: {
+  id: number;
+  title: string;
+  sourceName: string;
+  path: string;
+}) {
+  const { id, title, sourceName, path } = opts;
+  const description = `via ${sourceName} · ${SITE_NAME}`;
+  const image = {
+    url: `${SITE}/api/social-card/${id}`,
+    width: 1200,
+    height: 630,
+    alt: title,
+  };
+  return {
+    title: { absolute: `${title} — ${SITE_NAME}` },
+    description,
+    alternates: { canonical: path },
+    robots: { index: false, follow: true },
+    openGraph: {
+      siteName: SITE_NAME,
+      type: "article" as const,
+      locale: "en_CA",
+      url: `${path}?s=${id}`,
+      title,
+      description,
+      images: [image],
+    },
+    twitter: { card: "summary_large_image" as const, title, description, images: [image.url] },
+  };
+}

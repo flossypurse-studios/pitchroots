@@ -118,6 +118,26 @@ export async function itemCard(id: number): Promise<ItemCard | null> {
   return (rows[0] as ItemCard | undefined) ?? null;
 }
 
+// One feed item by id, for a shared-story link (`?s=<id>`, #561). Same columns
+// and the same rows as latestItems — the feed has no visibility filter beyond
+// the join, and neither does this or itemCard — so a pinned story can only ever
+// be one the feed itself would show. Null when the id doesn't exist.
+export async function pinnedItem(id: number): Promise<FeedItem | null> {
+  const q = sql();
+  const rows = await q`
+    select i.id, s.name as source_name, s.home_url as source_home,
+           i.url, i.title, i.summary, i.tags, i.published_at,
+           coalesce((
+             select json_agg(json_build_object('name', s2.name, 'url', x.url)
+                             order by x.published_at)
+             from item_sources x join sources s2 on s2.id = x.source_id
+             where x.item_id = i.id and x.source_id <> i.source_id
+           ), '[]'::json) as also
+    from items i join sources s on s.id = i.source_id
+    where i.id = ${id}`;
+  return (rows[0] as FeedItem | undefined) ?? null;
+}
+
 export async function latestItems(opts: { tag?: string; limit?: number } = {}): Promise<FeedItem[]> {
   const q = sql();
   const limit = opts.limit ?? 100;

@@ -1,10 +1,10 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Feed } from "@/components/Feed";
 import { latestItems } from "@/lib/db";
-import { breadcrumbJsonLd, pageOpenGraph } from "@/lib/seo";
+import { pageOpenGraph } from "@/lib/seo";
 import { TAGS, tagBySlug } from "@/lib/tags";
+import { TagView } from "./view";
 
 export const revalidate = 900;
 export const dynamicParams = false;
@@ -57,22 +57,5 @@ export default async function TagPage({
   const def = tagBySlug(tag);
   if (!def) notFound();
   const items = await hubItems(tag);
-  const breadcrumbs = breadcrumbJsonLd([
-    { name: "PitchRoots", path: "/" },
-    { name: "News", path: "/news" },
-    { name: `${def.label} news`, path: `/news/${tag}` },
-  ]);
-  return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs).replace(/</g, "\\u003c") }}
-      />
-      <div className="mb-6">
-        <h1 className="font-display font-black text-2xl">{def.label}</h1>
-        <p className="text-base text-muted mt-1">{def.blurb}</p>
-      </div>
-      <Feed items={items} initial={items.length} />
-    </>
-  );
+  return <TagView def={def} items={items} />;
 }
