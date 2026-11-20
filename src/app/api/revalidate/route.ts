@@ -30,6 +30,10 @@ export async function POST(request: Request) {
     revalidatePath("/games");
     for (const slug of TAG_SLUGS) revalidatePath(`/news/${slug}`);
     for (const slug of GAME_TAG_SLUGS) revalidatePath(`/games/${slug}`);
+    // Shared-story links (?s=) are their own ISR pages: a withdrawn story leaves
+    // them as fast as it leaves the feed (#561 review).
+    revalidatePath("/shared/[id]/news", "page");
+    revalidatePath("/shared/[id]/news/[tag]", "page");
   } catch (err) {
     // Log the class and message only, never the raw object.
     const e = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
@@ -38,6 +42,6 @@ export async function POST(request: Request) {
   }
   return Response.json({
     revalidated: true,
-    paths: 3 + TAG_SLUGS.length + GAME_TAG_SLUGS.length,
+    paths: 5 + TAG_SLUGS.length + GAME_TAG_SLUGS.length,
   });
 }
